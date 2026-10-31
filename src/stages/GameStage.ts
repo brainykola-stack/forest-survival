@@ -19,8 +19,9 @@ import { BUILD_DEFS, type BuildKind } from '../survival/Building';
 import { InventoryUI } from '../ui/InventoryUI';
 import { CraftingUI, BuildingUI } from '../ui/CraftingUI';
 import { TOTAL_NIGHTS, dangerForNight, maxEnemiesForNight, PLAYER, zoneAt } from '../core/Config';
+import { SessionState, type SessionPhase, type UiMode } from '../core/SessionState';
 
-type Stage3D = 'playing' | 'ui' | 'dead' | 'victory';
+
 
 /** Игровая сцена леса: все системы выживания в одном цикле. */
 export class GameStage implements Stage {
@@ -42,7 +43,11 @@ export class GameStage implements Stage {
   private craftingUI: CraftingUI;
   private buildingUI: BuildingUI;
 
-  private state: Stage3D = 'playing';
+  private session = new SessionState();
+
+  private get state(): SessionPhase {
+    return this.session.phase;
+  }
   private night = 1;
   private bonusNights = 0;
   private playTime = 0;
@@ -674,9 +679,7 @@ export class GameStage implements Stage {
   private readNote(id: string): void {
     const note = this.world.notes.find((n) => n.id === id);
     if (!note) return;
-    this.state = 'ui';
-    this.handle.input.releaseLock();
-    this.handle.input.enabled = false;
+    if (!this.enterUI('note')) return;
     this.handle.audio.uiClick();
     this.handle.screens.showNote(note.title, note.text, () => {
       this.notesFound.add(id);
@@ -695,9 +698,7 @@ export class GameStage implements Stage {
       child3: 'В пещере есть рисунки. Олень был не всегда злым — так написано. Кто-то его разбудил.',
       child4: 'Я держал костёр всю ночь. Оно приходило три раза. Я думал, что умру. Ты правда пришёл?',
     };
-    this.state = 'ui';
-    this.handle.input.releaseLock();
-    this.handle.input.enabled = false;
+    if (!this.enterUI('dialog')) return;
     this.handle.screens.showDialog(
       `${child.name} — спасённый ребёнок`,
       `${lines[child.id] ?? 'Спасибо, что нашёл меня.'}\n\n${child.hint}. Я буду ждать тебя в лагере.`,
@@ -718,7 +719,7 @@ export class GameStage implements Stage {
 
   private openInventory(): void {
     if (this.inventoryUI.isOpen) return;
-    this.enterUI();
+    if (!this.enterUI('inventory')) return;
     this.inventoryUI.open(this.inventory, {
       onUse: (id) => this.useItem(id),
       onDrop: (slot) => {
@@ -763,7 +764,7 @@ export class GameStage implements Stage {
 
   private openCrafting(): void {
     if (this.craftingUI.isOpen) return;
-    this.enterUI();
+    if (!this.enterUI('crafting')) return;
     const hasBench = this.building.hasWorkbenchNear(this.player.position);
     this.craftingUI.open(
       this.inventory,
@@ -789,7 +790,7 @@ export class GameStage implements Stage {
 
   private openBuilding(): void {
     if (this.buildingUI.isOpen) return;
-    this.enterUI();
+    if (!this.enterUI('building')) return;
     this.buildingUI.open(
       this.inventory,
       (kind: BuildKind | null) => this.startBuild(kind),
@@ -807,11 +808,12 @@ export class GameStage implements Stage {
     if (kind) this.handle.hud.toast(`${BUILD_DEFS[kind].name}: ЛКМ — поставить, Esc — отмена`, 3000);
   }
 
-  private enterUI(): void {
-    if (this.state !== 'playing') return;
-    this.state = 'ui';
+  /** Открывает модальное окно и забирает управление. */
+  private enterUI(mode: Exclude<UiMode, 'pause'>): boolean {
+    if (!this.session.openUi(mode)) return false;
     this.handle.input.enabled = false;
     this.handle.input.releaseLock();
+    return true;
   }
 
   private closeUI(): void {
@@ -819,25 +821,19 @@ export class GameStage implements Stage {
     this.craftingUI.close();
     this.buildingUI.close();
     this.handle.screens.clear();
-    this.state = 'playing';
+    if (!this.session.closeUi()) return;
     this.handle.input.enabled = true;
+    // Сбрасываем зажатые клавиши, иначе после «Продолжить» игрок уезжает сам.
     this.handle.input.clear();
     this.handle.input.requestLock();
   }
 
-  pause(): void {
-    if (this.state !== 'playing') return;
-    this.enterUI();
+  /** Показывает меню паузы поверх текущего состояния (мир уже остановлен). */
+  private showPauseMenu(): void {
     this.handle.screens.showPause({
       resume: () => this.closeUI(),
-      settings: () => {
-        this.handle.screens.clear();
-        this.handle.screens.showSettings(() => this.pause());
-      },
-      controls: () => {
-        this.handle.screens.clear();
-        this.handle.screens.showControls(() => this.pause());
-      },
+      settings: () => this.openPauseSubscreen('settings'),
+      controls: () => this.openPauseSubscreen('controls'),
       lobby: () => {
         void this.persist().then(() => this.handle.toLobby());
       },
@@ -847,8 +843,23 @@ export class GameStage implements Stage {
     });
   }
 
+  private openPauseSubscreen(kind: 'settings' | 'controls'): void {
+    if (!this.session.openNested()) return;
+    this.handle.screens.clear();
+    const back = () => this.pause();
+    if (kind === 'settings') this.handle.screens.showSettings(back);
+    else this.handle.screens.showControls(back);
+  }
+
+  pause(): void {
+    if (!this.session.openPause()) return;
+    this.handle.input.enabled = false;
+    this.handle.input.releaseLock();
+    this.showPauseMenu();
+  }
+
   onPointerLock(locked: boolean): void {
-    if (!locked && this.state === 'playing') this.pause();
+    if (!locked && this.session.isPlaying) this.pause();
   }
 
   // ------------------------------------------------------------------ смерть и финал
@@ -867,7 +878,7 @@ export class GameStage implements Stage {
       return;
     }
     this.deadHandled = true;
-    this.state = 'dead';
+    this.session.die();
     this.handle.input.releaseLock();
     this.handle.input.enabled = false;
     this.handle.audio.hit();
@@ -880,7 +891,7 @@ export class GameStage implements Stage {
 
   private handleVictory(): void {
     if (this.state === 'victory') return;
-    this.state = 'victory';
+    this.session.win();
     this.handle.input.releaseLock();
     this.handle.input.enabled = false;
     const rescued = this.rescue.savedCount;

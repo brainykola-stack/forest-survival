@@ -4,6 +4,7 @@ import { Settings } from './Settings';
 import { AudioEngine } from './Audio';
 import { InputManager } from './InputManager';
 import { SaveManager, type SaveData } from './SaveManager';
+import { RecoveryState } from './RecoveryState';
 import type { Stage, GameHandle } from './Stage';
 import { HUD } from '../ui/HUD';
 import { Screens } from '../ui/Screens';
@@ -29,7 +30,8 @@ export class Game implements GameHandle {
   private fade: HTMLElement;
   private transitioning = false;
   private booted = false;
-  private crashed = false;
+  private recovery = new RecoveryState();
+  private fatalOverlay: HTMLElement | null = null;
 
   constructor(
     private host: HTMLElement,
@@ -92,13 +94,14 @@ export class Game implements GameHandle {
       this.fpsTime = 0;
       this.hud.setFps(this.currentFps, this.settings.data.showFps);
     }
-    if (this.stage && !this.crashed) {
+    if (this.stage && this.recovery.canRender) {
       try {
         this.stage.update(dt);
         this.renderer.render(this.stage.scene, this.stage.camera);
       } catch (err) {
-        this.crashed = true;
-        this.fatal(err);
+        // Останавливаем цикл, чтобы исключение не повторялось каждый кадр,
+        // но показываем окно только один раз за аварию.
+        if (this.recovery.markCrash()) this.fatal(err);
       }
     }
     this.input.endFrame();
@@ -127,21 +130,32 @@ export class Game implements GameHandle {
   private fatal(err: unknown): void {
     const msg = err instanceof Error ? `${err.message}\n\n${err.stack ?? ''}` : String(err);
     console.error(err);
-    const box = document.createElement('div');
-    box.className = 'modal';
-    box.innerHTML = `<div class="panel"><div class="panel-title">Ошибка игры</div>
-      <div class="panel-sub">сцена не смогла загрузиться</div>
-      <pre style="white-space:pre-wrap;font-size:12px;color:#e0a8a0;max-height:40vh;overflow:auto">${msg
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')}</pre>
-      <div class="panel-actions"><button class="btn btn-primary" id="err-back">В меню</button></div></div>`;
-    this.uiRoot.appendChild(box);
-    box.querySelector('#err-back')?.addEventListener('click', () => {
-      box.remove();
-      this.toMenu(true);
-    });
+
+    // Одно окно на все повторные ошибки: не плодим модальные слои и обработчики.
+    if (!this.fatalOverlay) {
+      const box = document.createElement('div');
+      box.className = 'modal';
+      box.id = 'fatal-overlay';
+      box.innerHTML = `<div class="panel"><div class="panel-title">Ошибка игры</div>
+        <div class="panel-sub">сцена не смогла загрузиться</div>
+        <pre id="fatal-msg" style="white-space:pre-wrap;font-size:12px;color:#e0a8a0;max-height:40vh;overflow:auto"></pre>
+        <div class="panel-actions"><button class="btn btn-primary" id="err-back">В меню</button></div></div>`;
+      box.querySelector('#err-back')?.addEventListener('click', () => this.recoverFromFatal());
+      this.uiRoot.appendChild(box);
+      this.fatalOverlay = box;
+    }
+    const pre = this.fatalOverlay.querySelector('#fatal-msg');
+    if (pre) pre.textContent = msg;
+    this.fatalOverlay.classList.remove('hidden');
     this.fade.classList.remove('on');
     this.transitioning = false;
+  }
+
+  /** Возврат из окна аварии: сцена меню устанавливается заново и снимает флаг. */
+  private recoverFromFatal(): void {
+    this.fatalOverlay?.remove();
+    this.fatalOverlay = null;
+    this.toMenu(true);
   }
 
   private setStage(stage: Stage): void {
@@ -149,10 +163,12 @@ export class Game implements GameHandle {
     this.stage = stage;
     stage.resize(window.innerWidth, window.innerHeight);
     this.screens.clear();
+    // Новая сцена установлена успешно — цикл снова может обновляться и рисовать.
+    this.recovery.installOk();
   }
 
-  private async transitionTo(make: () => Stage): Promise<void> {
-    if (this.transitioning) return;
+  private async transitionTo(make: () => Stage): Promise<boolean> {
+    if (this.transitioning) return false;
     this.transitioning = true;
     this.fade.classList.add('on');
     this.fade.textContent = 'Загрузка...';
@@ -163,13 +179,14 @@ export class Game implements GameHandle {
       this.setStage(make());
     } catch (err) {
       this.fatal(err);
-      return;
+      return false;
     }
     await new Promise((r) => window.setTimeout(r, 120));
     this.fade.classList.remove('on');
     await new Promise((r) => window.setTimeout(r, 450));
     this.fade.textContent = '';
     this.transitioning = false;
+    return true;
   }
 
   toMenu(immediate = false): void {
@@ -201,7 +218,9 @@ export class Game implements GameHandle {
       );
       return;
     }
-    void this.transitionTo(build).then(() => this.showMenuAgain());
+    void this.transitionTo(build).then((ok) => {
+      if (ok) this.showMenuAgain();
+    });
   }
 
   private showMenuAgain(): void {
@@ -252,8 +271,10 @@ export class Game implements GameHandle {
     this.audio.ensure();
     this.audio.startAmbience();
     const seed = save?.seed ?? Math.floor(Math.random() * 1e9);
-    void this.transitionTo(() => new GameStage(this, seed, save ?? null)).then(() => {
-      this.input.requestLock();
+    void this.transitionTo(() => new GameStage(this, seed, save ?? null)).then((ok) => {
+      // Автоматический захват мыши может быть отклонён браузером — тогда
+      // игрок кликнет по экрану, подсказка в HUD это показывает.
+      if (ok) this.input.requestLock();
     });
   }
 
