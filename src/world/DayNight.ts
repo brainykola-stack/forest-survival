@@ -49,6 +49,8 @@ export class DayNight {
   private dayLen: number;
   private nightLen: number;
   private speed = 1;
+  /** Множитель длительности ночи: особые ночи длятся дольше. */
+  private nightScale = 1;
 
   constructor(
     private scene: THREE.Scene,
@@ -135,7 +137,11 @@ export class DayNight {
   }
 
   get phaseLength(): number {
-    return this.phase === 'day' ? this.dayLen : this.nightLen;
+    return this.phase === 'day' ? this.dayLen : this.nightLen * this.nightScale;
+  }
+
+  setNightScale(scale: number): void {
+    this.nightScale = Math.max(0.5, Math.min(3, scale));
   }
 
   get phaseProgress(): number {

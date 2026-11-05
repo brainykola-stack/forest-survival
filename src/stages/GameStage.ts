@@ -14,6 +14,7 @@ import { ITEMS, type ItemId } from '../survival/Items';
 import { craft, canCraft, type Recipe } from '../survival/Crafting';
 import { Enemy, type EnemyKind } from '../enemies/Enemy';
 import { WorldEvents, type WorldEventKind } from '../world/WorldEvents';
+import { NightDirector, type NightModifier } from '../world/NightDirector';
 import { RNG } from '../core/Rand';
 import { BUILD_DEFS, type BuildKind } from '../survival/Building';
 import { InventoryUI } from '../ui/InventoryUI';
@@ -62,6 +63,9 @@ export class GameStage implements Stage {
   private spawnTimer = 0;
   private saveTimer = 0;
   private events: WorldEvents;
+  private director = new NightDirector();
+  private nightMod: NightModifier = this.director.forNight(1);
+  private fogBonus = 0;
   private fogSurge = 0;
   private torchOn = false;
   private prompt: string | null = null;
@@ -112,6 +116,7 @@ export class GameStage implements Stage {
     this.buildCharm();
     this.prebuildCamp();
     this.maybeSpawnShowcaseStag();
+    if (!save) this.applyDebugStart();
 
     if (save) this.applySave(save);
     else {
@@ -176,6 +181,12 @@ export class GameStage implements Stage {
     this.bonusNights = save.bonusNights;
     this.playTime = save.playTime;
     this.dayNight.setTime(save.phase, save.phaseTime);
+    this.nightMod = this.director.forNight(this.night);
+    if (this.dayNight.isNight) {
+      this.fogBonus = this.nightMod.fog;
+      this.campfire.drainMultiplier = this.nightMod.fireDrain;
+      this.dayNight.setNightScale(this.nightMod.nightScale);
+    }
     this.player.stats.health = save.stats.health;
     this.player.stats.hunger = save.stats.hunger;
     this.player.stats.stamina = save.stats.stamina;
@@ -297,6 +308,9 @@ export class GameStage implements Stage {
       const fog = this.scene.fog as THREE.FogExp2;
       fog.density += 0.014;
     }
+    if (this.fogBonus > 0) {
+      (this.scene.fog as THREE.FogExp2).density += this.fogBonus;
+    }
 
     const ev = this.events.update(dt, {
       isNight: this.dayNight.isNight,
@@ -334,7 +348,7 @@ export class GameStage implements Stage {
     const nightNow = this.dayNight.nightLevel;
     if (this.dayNight.isNight) {
       this.spawnTimer -= dt;
-      const maxE = maxEnemiesForNight(this.night);
+      const maxE = maxEnemiesForNight(this.night) + this.nightMod.enemyBonus;
       if (this.spawnTimer <= 0 && this.enemies.length < maxE) {
         this.spawnTimer = Math.max(3.5, 11 - this.night * 0.05);
         this.spawnEnemy();
@@ -362,7 +376,7 @@ export class GameStage implements Stage {
       // Дальние враги думают реже — экономия кадров
       const result = e.update(dist > 70 ? dt * 0.2 : dt, ctx);
       if (result.attacked && dist < e.stats.attackRange + 1.0) {
-        const died = this.player.damage(e.stats.damage);
+        const died = this.player.damage(e.stats.damage * this.nightMod.damageFactor);
         this.handle.audio.hurt();
         this.handle.hud.flashDamage();
         if (died) this.handleDeath();
@@ -386,24 +400,42 @@ export class GameStage implements Stage {
     return THREE.MathUtils.clamp(dir.dot(right), -1, 1);
   }
 
-  private spawnEnemy(): void {
-    const kinds: EnemyKind[] = [];
-    if (this.night >= 1) kinds.push('crawler', 'crawler');
-    if (this.night >= 3) kinds.push('hunter', 'hunter');
-    if (this.night >= 8) kinds.push('bog');
-    if (this.night >= 20 && Math.random() < 0.15) kinds.push('deer');
-    if (this.night >= 99) kinds.push('deer');
-    const kind = kinds[Math.floor(Math.random() * kinds.length)] ?? 'crawler';
+  private spawnEnemy(kindOverride?: EnemyKind, nearCamp = false): void {
+    let kind = kindOverride;
+    if (!kind) {
+      const kinds: EnemyKind[] = [];
+      if (this.night >= 1) kinds.push('crawler', 'crawler');
+      if (this.night >= 3) kinds.push('hunter', 'hunter');
+      if (this.night >= 8) kinds.push('bog');
+      if (this.night >= 20 && Math.random() < 0.15) kinds.push('deer');
+      if (this.night >= 99) kinds.push('deer');
+      kind = kinds[Math.floor(Math.random() * kinds.length)] ?? 'crawler';
+    }
 
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 34 + Math.random() * 26;
-    const x = this.player.position.x + Math.cos(angle) * dist;
-    const z = this.player.position.z + Math.sin(angle) * dist;
+    let x: number;
+    let z: number;
+    if (nearCamp || this.nightMod.spawnNearCamp) {
+      // «Осада»: враги выходят к лагерю, а не бродят по лесу.
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 14 + Math.random() * 10;
+      x = this.campfire.position.x + Math.cos(angle) * dist;
+      z = this.campfire.position.z + Math.sin(angle) * dist;
+    } else {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 34 + Math.random() * 26;
+      x = this.player.position.x + Math.cos(angle) * dist;
+      z = this.player.position.z + Math.sin(angle) * dist;
+    }
+
     const y = this.world.heightAt(x, z);
     if (y < 0.4) return;
     const zone = zoneAt(x, z);
-    if (zone.danger < 1 && Math.random() < 0.6) return;
+    if (zone.danger < 1 && !nearCamp && Math.random() < 0.6) return;
+
     const enemy = new Enemy(kind, new THREE.Vector3(x, y, z), this.scene);
+    // Ночные правила ускоряют погоню.
+    enemy.stats.speed *= this.nightMod.speedFactor;
+    enemy.stats.chaseSpeed *= this.nightMod.speedFactor;
     if (this.night >= 99) {
       enemy.stats.hp = 420;
       enemy.hp = 420;
@@ -411,20 +443,46 @@ export class GameStage implements Stage {
     this.enemies.push(enemy);
   }
 
+  /** Применяет правила ночи: туман, расход огня, длительность. */
+  private applyNightModifier(mod: NightModifier): void {
+    this.nightMod = mod;
+    this.fogBonus = mod.fog;
+    this.campfire.drainMultiplier = mod.fireDrain;
+    this.dayNight.setNightScale(mod.nightScale);
+  }
+
+  /**
+   * Отладочный старт сразу в выбранной ночи: `?night=30`.
+   * Нужен для проверки особых ночей без ожидания.
+   */
+  private applyDebugStart(): void {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const raw = Number(params.get('night'));
+    if (!raw || !Number.isFinite(raw) || raw < 1) return;
+
+    this.night = Math.min(TOTAL_NIGHTS, Math.floor(raw));
+    this.dayNight.setTime('night', 6);
+    const mod = this.director.forNight(this.night);
+    this.applyNightModifier(mod);
+    this.handle.hud.setNight(this.night, TOTAL_NIGHTS);
+    if (mod.title) this.handle.hud.showBanner(mod.title, mod.subtitle, 6500);
+    else this.handle.hud.toast(`Отладочный старт: ночь ${this.night}.`, 4000);
+    for (const kind of mod.guaranteed) this.spawnEnemy(kind);
+  }
+
   private onNightStart(): void {
-    this.handle.hud.toast(`НОЧЬ ${this.night}. Огонь — единственный друг.`, 4500);
+    const mod = this.director.forNight(this.night);
+    this.applyNightModifier(mod);
+
+    if (mod.title) this.handle.hud.showBanner(mod.title, mod.subtitle, 6200);
+    else this.handle.hud.toast(`НОЧЬ ${this.night}. Огонь — единственный друг.`, 4500);
+
     this.handle.audio.setNightLevel(1);
     this.spawnTimer = 0;
     this.handle.save.save(this.makeSave()).then(() => this.handle.afterSave());
-    if (this.night === 99) {
-      this.handle.hud.toast('Последняя ночь. Хозяин леса идёт за тобой.', 6000);
-      const x = this.player.position.x + 26;
-      const z = this.player.position.z - 20;
-      const deer = new Enemy('deer', new THREE.Vector3(x, this.world.heightAt(x, z), z), this.scene);
-      deer.stats.hp = 520;
-      deer.hp = 520;
-      this.enemies.push(deer);
-    }
+
+    for (const kind of mod.guaranteed) this.spawnEnemy(kind, false);
   }
 
   private onDayStart(): void {
@@ -432,12 +490,22 @@ export class GameStage implements Stage {
     this.night++;
     this.handle.hud.toast(`Ночь пережита! Начинается день ${this.night}.`, 5000);
     this.handle.audio.setNightLevel(0);
+    this.fogBonus = 0;
+    this.campfire.drainMultiplier = 1;
+    this.dayNight.setNightScale(1);
     for (const e of this.enemies) e.takeDamage(9999);
+
     const completed = this.quests.notify('night_survived', 1);
     for (const q of completed) this.completeQuest(q.title);
 
     this.player.stats.heal(8);
     this.player.stats.feed(4);
+
+    this.nightMod = this.director.forNight(this.night);
+    if (this.director.isSpecial(this.night)) {
+      const next = this.director.forNight(this.night);
+      window.setTimeout(() => this.handle.hud.showBanner(`СЛЕДУЮЩАЯ НОЧЬ: ${next.title}`, next.subtitle, 5000), 5200);
+    }
 
     if (this.night > TOTAL_NIGHTS) {
       this.handleVictory();

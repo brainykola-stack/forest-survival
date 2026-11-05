@@ -2,7 +2,7 @@
 
 ## 3D-модели
 
-**Stag.glb, Deer.glb** — Quaternius, «Ultimate Animated Animal Pack».
+**Stag.glb, Deer.glb, Wolf.glb, Fox.glb, Bull.glb** — Quaternius, «Ultimate Animated Animal Pack».
 Лицензия: [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) — можно использовать
 в личных и коммерческих проектах без указания автора (указан из уважения).
 Источник: https://quaternius.com/packs/ultimateanimatedanimal.html

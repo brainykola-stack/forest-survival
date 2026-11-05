@@ -5,6 +5,8 @@ export class Campfire {
   readonly group = new THREE.Group();
   fuel = 100;
   lit = true;
+  /** Множитель расхода топлива: в холодные ночи огонь ест дрова быстрее. */
+  drainMultiplier = 1;
   readonly maxFuel = 100;
   readonly position: THREE.Vector3;
 
@@ -114,7 +116,7 @@ export class Campfire {
     this.time += dt;
     let justDied = false;
     if (this.lit) {
-      this.fuel -= dt * 100 / 260; // ~4.3 минуты на полном топливе
+      this.fuel -= (dt * 100 / 260) * this.drainMultiplier; // ~4.3 минуты на полном топливе
       if (this.fuel <= 0) {
         this.fuel = 0;
         this.lit = false;

@@ -19,6 +19,8 @@ export class HUD {
   private flash: HTMLElement;
   private fps: HTMLElement;
   private rescueLabel: HTMLElement;
+  private banner: HTMLElement;
+  private bannerTimer = 0;
   private toastsCount = 0;
 
   constructor(parent: HTMLElement) {
@@ -44,6 +46,7 @@ export class HUD {
       <div class="crosshair"></div>
       <div class="interact hidden"></div>
       <div class="toast-stack"></div>
+      <div class="night-banner hidden"></div>
       <div class="damage-flash"></div>
       <div class="fps"></div>
     `;
@@ -65,6 +68,7 @@ export class HUD {
     this.toasts = this.root.querySelector('.toast-stack') as HTMLElement;
     this.flash = this.root.querySelector('.damage-flash') as HTMLElement;
     this.fps = this.root.querySelector('.fps') as HTMLElement;
+    this.banner = this.root.querySelector('.night-banner') as HTMLElement;
 
     for (let i = 0; i < 4; i++) {
       const slot = document.createElement('div');
@@ -76,6 +80,18 @@ export class HUD {
 
   setVisible(v: boolean): void {
     this.root.classList.toggle('hidden', !v);
+  }
+
+  /** Крупный заголовок события: «НОЧЬ СТАИ», «КРОВАВАЯ ЛУНА» и т. п. */
+  showBanner(title: string, subtitle: string, ms = 5200): void {
+    this.banner.innerHTML = `<div class="nb-title">${title}</div><div class="nb-sub">${subtitle}</div>`;
+    this.banner.classList.remove('hidden');
+    this.banner.style.opacity = '1';
+    window.clearTimeout(this.bannerTimer);
+    this.bannerTimer = window.setTimeout(() => {
+      this.banner.style.opacity = '0';
+      window.setTimeout(() => this.banner.classList.add('hidden'), 900);
+    }, ms);
   }
 
   setStats(health: number, hunger: number, stamina: number): void {

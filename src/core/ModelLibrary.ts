@@ -45,6 +45,9 @@ export class ModelLibrary {
     const jobs: Array<[string, string]> = [
       ['stag', `${base}assets/models/Stag.glb`],
       ['deer', `${base}assets/models/Deer.glb`],
+      ['wolf', `${base}assets/models/Wolf.glb`],
+      ['fox', `${base}assets/models/Fox.glb`],
+      ['bull', `${base}assets/models/Bull.glb`],
     ];
     this.pending = Promise.all(
       jobs.map(async ([key, url]) => {

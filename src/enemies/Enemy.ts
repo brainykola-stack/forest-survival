@@ -34,9 +34,17 @@ interface Stats {
 
 const KIND_STATS: Record<EnemyKind, Stats> = {
   deer: { speed: 3.4, chaseSpeed: 8.2, detect: 34, fov: 1.1, attackRange: 3.1, damage: 26, hp: 260, scale: 1 },
-  hunter: { speed: 2.7, chaseSpeed: 5.6, detect: 22, fov: 1.2, attackRange: 2.2, damage: 14, hp: 70, scale: 1 },
-  crawler: { speed: 3.6, chaseSpeed: 7.0, detect: 16, fov: 1.4, attackRange: 1.7, damage: 9, hp: 40, scale: 1 },
-  bog: { speed: 2.0, chaseSpeed: 3.8, detect: 18, fov: 1.0, attackRange: 2.6, damage: 20, hp: 130, scale: 1.2 },
+  hunter: { speed: 3.0, chaseSpeed: 6.6, detect: 24, fov: 1.25, attackRange: 2.2, damage: 14, hp: 70, scale: 1 },
+  crawler: { speed: 4.0, chaseSpeed: 7.8, detect: 18, fov: 1.4, attackRange: 1.7, damage: 9, hp: 36, scale: 1 },
+  bog: { speed: 2.2, chaseSpeed: 4.4, detect: 18, fov: 1.0, attackRange: 2.8, damage: 22, hp: 150, scale: 1.2 },
+};
+
+/** Какая модель и клип атаки соответствуют виду противника. */
+const KIND_MODEL: Record<EnemyKind, { key: string; height: number; attack: string; glow: number }> = {
+  deer: { key: 'stag', height: 3.6, attack: 'Attack_Headbutt', glow: 0xff4a1a },
+  hunter: { key: 'wolf', height: 1.7, attack: 'Attack', glow: 0xffb347 },
+  crawler: { key: 'fox', height: 1.0, attack: 'Attack', glow: 0xffd27a },
+  bog: { key: 'bull', height: 2.2, attack: 'Attack_Headbutt', glow: 0x7cf0c0 },
 };
 
 /** Противник с конечным автоматом состояний и простым обходом препятствий. */
@@ -55,6 +63,7 @@ export class Enemy {
   lastKnown: THREE.Vector3 | null = null;
   private model: Model;
   private model3d: ModelInstance | null = null;
+  private attackClip = 'Attack';
   private time = 0;
   private stateTimer = 0;
   attackCd = 0;
@@ -175,7 +184,7 @@ export class Enemy {
     if (!this.model3d) return;
     this.model3d.update(dt);
     let anim = 'Idle';
-    if (this.state === 'attack') anim = 'Attack_Headbutt';
+    if (this.state === 'attack') anim = this.attackClip;
     else if (this.state === 'chase') anim = 'Gallop';
     else if (this.speedActual > 0.4) anim = 'Walk';
     this.model3d.play(anim);
@@ -363,34 +372,32 @@ export class Enemy {
   // ------------------------------------------------------------------ модели
 
   private buildModel(kind: EnemyKind): Model {
-    if (kind === 'deer') return this.buildStag() ?? this.buildDeer();
+    const spec = KIND_MODEL[kind];
+    const instance = modelLibrary.create(spec.key, spec.height);
+    if (instance) {
+      this.attackClip = spec.attack;
+      return this.wrapAnimal(instance, spec.glow);
+    }
+    if (kind === 'deer') return this.buildDeer();
     if (kind === 'hunter') return this.buildHunter();
     if (kind === 'crawler') return this.buildCrawler();
     return this.buildBog();
   }
 
-  /**
-   * Модель оленя из бесплатного пака Quaternius (CC0): скелет, анимации,
-   * тёмная шкура. Если файл не загрузился — используется процедурная заглушка.
-   */
-  private buildStag(): Model | null {
-    const instance = modelLibrary.create('stag', 3.6);
-    if (!instance) return null;
+  /** Модель животного из пака: скелет, анимации, свечение глаз. */
+  private wrapAnimal(instance: ModelInstance, glowColor: number): Model {
     const root = instance.root;
-
-    // Глаза светятся: источник света на голове, чтобы силуэт читался в темноте.
     let headBone: THREE.Object3D | null = null;
     root.traverse((o) => {
       if (!headBone && o.name && /head/i.test(o.name)) headBone = o;
     });
-    const glow = new THREE.PointLight(0xff4a1a, 2.0, 9, 2);
+    const glow = new THREE.PointLight(glowColor, this.kind === 'deer' ? 2.0 : 0.9, this.kind === 'deer' ? 9 : 5, 2);
     (headBone ?? root).add(glow);
 
     const group = new THREE.Group();
     group.add(root);
     this.model3d = instance;
     instance.play('Idle', 0);
-
     return { group, legs: [], head: null, eyes: [] };
   }
 
