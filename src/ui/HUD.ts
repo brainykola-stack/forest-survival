@@ -20,6 +20,7 @@ export class HUD {
   private fps: HTMLElement;
   private rescueLabel: HTMLElement;
   private banner: HTMLElement;
+  private ammoLabel: HTMLElement;
   private bannerTimer = 0;
   private toastsCount = 0;
 
@@ -40,6 +41,7 @@ export class HUD {
         <div class="hud-res hud-fire">Костёр: 100%</div>
         <div class="hud-res hud-res-count">🪵 0 · 🪨 0 · 🌿 0</div>
         <div class="hud-res hud-rescue">Спасено: 0 / 4</div>
+        <div class="hud-res hud-ammo hidden">Патроны: 0</div>
       </div>
       <div class="hud-quest"><b>Задание</b><span class="q-desc"></span></div>
       <div class="hotbar"></div>
@@ -69,6 +71,7 @@ export class HUD {
     this.flash = this.root.querySelector('.damage-flash') as HTMLElement;
     this.fps = this.root.querySelector('.fps') as HTMLElement;
     this.banner = this.root.querySelector('.night-banner') as HTMLElement;
+    this.ammoLabel = this.root.querySelector('.hud-ammo') as HTMLElement;
 
     for (let i = 0; i < 4; i++) {
       const slot = document.createElement('div');
@@ -120,6 +123,17 @@ export class HUD {
 
   setRescued(n: number, total: number): void {
     this.rescueLabel.textContent = `Спасено: ${n} / ${total}`;
+  }
+
+  /** Показывает боезапас, пока в руках ружьё. */
+  setAmmo(count: number | null): void {
+    if (count === null) {
+      this.ammoLabel.classList.add('hidden');
+      return;
+    }
+    this.ammoLabel.classList.remove('hidden');
+    this.ammoLabel.textContent = `Патроны: ${count}`;
+    this.ammoLabel.classList.toggle('low', count <= 3);
   }
 
   setQuest(title: string, desc: string, progress: string): void {

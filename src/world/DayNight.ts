@@ -44,6 +44,8 @@ export class DayNight {
   private hemi: THREE.HemisphereLight;
   private stars: THREE.Points;
   private moonMesh: THREE.Mesh;
+  private sunMesh: THREE.Mesh;
+  private clouds: THREE.Mesh[] = [];
   private fog: THREE.FogExp2;
 
   private dayLen: number;
@@ -130,6 +132,33 @@ export class DayNight {
     );
     this.moonMesh.name = 'moon';
     scene.add(this.moonMesh);
+
+    // Солнце — видимый диск, чтобы день ощущался днём.
+    this.sunMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(16, 20, 14),
+      new THREE.MeshBasicMaterial({ color: 0xfff0c0, fog: false, transparent: true, opacity: 0.95 }),
+    );
+    this.sunMesh.name = 'sun';
+    scene.add(this.sunMesh);
+
+    // Облака: плоские мягкие формы, медленно плывут по небу.
+    const cloudMat = new THREE.MeshBasicMaterial({
+      color: 0xdde4e9,
+      transparent: true,
+      opacity: 0.32,
+      depthWrite: false,
+      fog: false,
+    });
+    for (let i = 0; i < 9; i++) {
+      const cloud = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), cloudMat.clone());
+      const angle = (i / 9) * Math.PI * 2 + Math.random();
+      const radius = 120 + Math.random() * 140;
+      cloud.position.set(Math.cos(angle) * radius, 95 + Math.random() * 45, Math.sin(angle) * radius);
+      cloud.scale.set(34 + Math.random() * 30, 7 + Math.random() * 4, 22 + Math.random() * 18);
+      cloud.rotation.y = Math.random() * Math.PI;
+      this.clouds.push(cloud);
+      scene.add(cloud);
+    }
   }
 
   get isNight(): boolean {
@@ -202,6 +231,12 @@ export class DayNight {
     }
     this.nightLevel = level;
 
+    // Облака плывут независимо от времени суток.
+    for (const cloud of this.clouds) {
+      cloud.position.x += dt * 1.4;
+      if (cloud.position.x > 330) cloud.position.x = -330;
+    }
+
     this.applyVisuals();
     return { justBecameNight, justBecameDay };
   }
@@ -246,6 +281,15 @@ export class DayNight {
     this.moon.position.copy(moonDir).multiplyScalar(120);
     this.moon.target.position.set(0, 0, 0);
 
+    // Солнце: тот же диск, что и луна, но днём.
+    this.sunMesh.position.copy(sunDir).multiplyScalar(430);
+    (this.sunMesh.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - n * 1.5);
+    this.sunMesh.visible = n < 0.78;
+
+    for (const cloud of this.clouds) {
+      (cloud.material as THREE.MeshBasicMaterial).opacity = 0.3 * (1 - n * 0.85);
+    }
+
     this.moonMesh.position.copy(moonDir).multiplyScalar(420);
     (this.moonMesh.material as THREE.MeshBasicMaterial).opacity = 1;
     this.moonMesh.visible = n > 0.05;
@@ -274,6 +318,14 @@ export class DayNight {
     (this.stars.material as THREE.Material).dispose();
     this.moonMesh.geometry.dispose();
     (this.moonMesh.material as THREE.Material).dispose();
-    this.scene.remove(this.sky, this.stars, this.moonMesh, this.sun, this.moon, this.hemi, this.sun.target, this.moon.target);
+    for (const cloud of this.clouds) {
+      cloud.geometry.dispose();
+      (cloud.material as THREE.Material).dispose();
+      this.scene.remove(cloud);
+    }
+    this.clouds = [];
+    this.sunMesh.geometry.dispose();
+    (this.sunMesh.material as THREE.Material).dispose();
+    this.scene.remove(this.sky, this.stars, this.moonMesh, this.sunMesh, this.sun, this.moon, this.hemi, this.sun.target, this.moon.target);
   }
 }

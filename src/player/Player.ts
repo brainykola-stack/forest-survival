@@ -22,6 +22,8 @@ export class Player {
 
   torchLight: THREE.PointLight;
   torchOn = false;
+  private weaponGroup: THREE.Group | null = null;
+  private weaponKind: 'rifle' | null = null;
 
   private velY = 0;
   private velX = 0;
@@ -84,6 +86,39 @@ export class Player {
   setTorch(on: boolean): void {
     this.torchOn = on;
     this.torchLight.intensity = on ? 6.5 : 0;
+  }
+
+  /** Простая модель оружия в руках от первого лица. */
+  setWeapon(kind: 'rifle' | null): void {
+    if (this.weaponKind === kind) return;
+    this.weaponKind = kind;
+    if (this.weaponGroup) {
+      this.camera.remove(this.weaponGroup);
+      this.weaponGroup.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          (o.material as THREE.Material).dispose();
+        }
+      });
+      this.weaponGroup = null;
+    }
+    if (!kind) return;
+
+    const group = new THREE.Group();
+    const wood = new THREE.MeshLambertMaterial({ color: 0x6b4a2c });
+    const metal = new THREE.MeshLambertMaterial({ color: 0x27272b });
+
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.1, 0.55), wood);
+    stock.position.set(0.24, -0.22, -0.55);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.85, 8), metal);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0.24, -0.16, -0.95);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.18, 0.1), wood);
+    grip.position.set(0.24, -0.32, -0.42);
+    group.add(stock, barrel, grip);
+    group.position.set(0, 0, 0);
+    this.camera.add(group);
+    this.weaponGroup = group;
   }
 
   damage(amount: number): boolean {

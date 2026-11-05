@@ -12,6 +12,8 @@ export type ItemId =
   | 'axe'
   | 'pickaxe'
   | 'spear'
+  | 'rifle'
+  | 'bullet'
   | 'torch'
   | 'bandage'
   | 'note'
@@ -131,6 +133,23 @@ export const ITEMS: Record<ItemId, ItemDef> = {
     maxStack: 1,
     description: 'Оружие против тех, кто охотится ночью.',
     damage: 34,
+  },
+  rifle: {
+    id: 'rifle',
+    name: 'Ружьё',
+    category: 'weapon',
+    icon: '🔫',
+    maxStack: 1,
+    description: 'Дробовик из металла и дерева. Бьёт далеко и больно, но требует патронов.',
+    damage: 55,
+  },
+  bullet: {
+    id: 'bullet',
+    name: 'Патроны',
+    category: 'resource',
+    icon: '🧨',
+    maxStack: 30,
+    description: 'Самокрутные патроны. Один выстрел — один патрон.',
   },
   torch: {
     id: 'torch',

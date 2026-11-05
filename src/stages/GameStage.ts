@@ -67,6 +67,9 @@ export class GameStage implements Stage {
   private nightMod: NightModifier = this.director.forNight(1);
   private fogBonus = 0;
   private fogSurge = 0;
+  private fireRing: THREE.InstancedMesh | null = null;
+  private fireRingMat: THREE.MeshBasicMaterial | null = null;
+  private muzzleLight: THREE.PointLight | null = null;
   private torchOn = false;
   private prompt: string | null = null;
   private promptBlocked = false;
@@ -98,12 +101,17 @@ export class GameStage implements Stage {
     const spawn = new THREE.Vector3(0, campY + 0.2, 6);
     this.player = new Player(this.physics, this.scene, spawn, controller, this.handle.settings.qualityPreset.drawDistance);
     this.camera = this.player.camera;
+    this.muzzleLight = new THREE.PointLight(0xffcf8a, 0, 22, 2);
+    this.muzzleLight.position.set(0.22, -0.12, -1.0);
+    this.player.camera.add(this.muzzleLight);
     this.player.onFootstep = (surface) => {
       const dist = this.player.position.distanceTo(this.campfire.position);
       this.handle.audio.footstep(dist < 8 ? 'dirt' : surface);
     };
 
     this.dayNight = new DayNight(this.scene);
+    // Игра начинается в полдень: светло и видно окрестности.
+    this.dayNight.setTime('day', this.dayNight.phaseLength / 3);
     this.events = new WorldEvents(new RNG(seed ^ 0x9e3779b9));
     this.building = new BuildingSystem(this.scene, this.physics, this.world.terrain);
     this.rescue = new RescueSystem(this.scene, this.world.childSpots);
@@ -114,15 +122,17 @@ export class GameStage implements Stage {
     this.buildingUI = new BuildingUI(document.getElementById('ui-root')!);
 
     this.buildCharm();
+    this.buildFireRing();
     this.prebuildCamp();
     this.maybeSpawnShowcaseStag();
+    this.applyDebugKit();
     if (!save) this.applyDebugStart();
 
     if (save) this.applySave(save);
     else {
       this.inventory.add('wood', 3);
       this.inventory.add('fiber', 2);
-      this.handle.hud.toast('Рассвет. Собери древесину и подбрось в костёр.', 5000);
+      this.handle.hud.toast('Полдень. Собери древесину и поддерживай костёр до темноты.', 5000);
       window.setTimeout(() => this.handle.hud.toast('E — взаимодействие · Tab — инвентарь · C — крафт · B — стройка', 6000), 1200);
     }
 
@@ -131,6 +141,38 @@ export class GameStage implements Stage {
   }
 
   // ------------------------------------------------------------------ инициализация
+
+  /** Белые пунктирные метки круга, за который не заходят твари. */
+  private buildFireRing(): void {
+    const radius = this.campfire.guardRadius;
+    const count = 72;
+    const geo = new THREE.BoxGeometry(0.75, 0.05, 0.16);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+      fog: false,
+    });
+    const ring = new THREE.InstancedMesh(geo, mat, count);
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const one = new THREE.Vector3(1, 1, 1);
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2;
+      const x = this.campfire.position.x + Math.cos(a) * radius;
+      const z = this.campfire.position.z + Math.sin(a) * radius;
+      const y = this.world.heightAt(x, z) + 0.08;
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -(a + Math.PI / 2));
+      m.compose(new THREE.Vector3(x, y, z), q, one);
+      ring.setMatrixAt(i, m);
+    }
+    ring.instanceMatrix.needsUpdate = true;
+    ring.frustumCulled = false;
+    this.fireRing = ring;
+    this.fireRingMat = mat;
+    this.scene.add(ring);
+  }
 
   private prebuildCamp(): void {
     const y = this.world.heightAt(3.2, 0);
@@ -252,6 +294,7 @@ export class GameStage implements Stage {
     const hud = this.handle.hud;
     this.interactCd = Math.max(0, this.interactCd - dt);
     this.attackCd = Math.max(0, this.attackCd - dt);
+    if (this.muzzleLight) this.muzzleLight.intensity = Math.max(0, this.muzzleLight.intensity - dt * 320);
     this.cheerTimer = Math.max(0, this.cheerTimer - dt);
 
     if (this.state === 'playing') {
@@ -320,7 +363,14 @@ export class GameStage implements Stage {
     if (ev) this.applyEvent(ev);
 
     const crackle = this.campfire.update(dt, this.player.position);
-    if (crackle.justDied) this.handle.hud.toast('Костёр погас. Нужны дрова и искра (F).', 4500);
+    if (crackle.justDied) this.handle.hud.toast('Костёр погас! Твари больше не боятся огня.', 4500);
+
+    // Круг защиты: яркий пока огонь горит, тусклый — когда потух.
+    if (this.fireRingMat) {
+      const lit = this.campfire.guardActive;
+      this.fireRingMat.color.setHex(lit ? 0xffffff : 0x7a5a5a);
+      this.fireRingMat.opacity = lit ? 0.55 : 0.14;
+    }
 
     this.world.update(dt, this.player.position);
     this.rescue.update(dt);
@@ -333,6 +383,8 @@ export class GameStage implements Stage {
       this.torchOn = wantTorch;
       this.player.setTorch(wantTorch);
     }
+    // Ружьё в руках видно от первого лица.
+    this.player.setWeapon(slot?.id === 'rifle' ? 'rifle' : null);
 
     if (this.charmMesh && !this.charmTaken) {
       this.charmMesh.rotation.y += dt * 1.4;
@@ -363,6 +415,12 @@ export class GameStage implements Stage {
       physics: this.physics,
       playerLit: this.torchOn || this.player.position.distanceTo(this.campfire.position) < this.campfire.safeRadius(),
       playerRunning: this.player.sprinting,
+      safe: {
+        x: this.campfire.position.x,
+        z: this.campfire.position.z,
+        radius: this.campfire.guardRadius,
+        active: this.campfire.guardActive,
+      },
     };
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -449,6 +507,22 @@ export class GameStage implements Stage {
     this.fogBonus = mod.fog;
     this.campfire.drainMultiplier = mod.fireDrain;
     this.dayNight.setNightScale(mod.nightScale);
+  }
+
+  /** Отладочный набор вещей: `?kit=1` — ружьё, патроны и материалы. */
+  private applyDebugKit(): void {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('kit')) return;
+    this.inventory.add('rifle', 1);
+    this.inventory.add('bullet', 12);
+    this.inventory.add('wood', 20);
+    this.inventory.add('stone', 20);
+    this.inventory.add('metal', 10);
+    this.inventory.add('fiber', 10);
+    this.inventory.add('bandage', 2);
+    this.inventory.select(0);
+    this.handle.hud.toast('Тестовый набор: ружьё, патроны и материалы.', 5200);
   }
 
   /**
@@ -615,6 +689,10 @@ export class GameStage implements Stage {
   }
 
   private tryAttack(): void {
+    if (this.inventory.selectedSlot()?.id === 'rifle') {
+      this.tryShoot();
+      return;
+    }
     const dir = this.player.lookDir();
     const origin = this.player.eyePosition;
     const slot = this.inventory.selectedSlot();
@@ -647,6 +725,48 @@ export class GameStage implements Stage {
     if (node && this.interactCd <= 0) {
       this.interactCd = 0.35;
       this.gather(node);
+    }
+  }
+
+  /** Выстрел из ружья: тратит патрон, бьёт самого вероятного врага в прицеле. */
+  private tryShoot(): void {
+    if (this.inventory.countOf('bullet') <= 0) {
+      this.handle.audio.dryFire();
+      this.handle.hud.toast('Нет патронов. Смастери их (C).', 2400);
+      return;
+    }
+    this.inventory.remove('bullet', 1);
+    this.handle.audio.shot();
+    if (this.muzzleLight) this.muzzleLight.intensity = 28;
+
+    const origin = this.player.eyePosition;
+    const dir = this.player.lookDir();
+    let best: Enemy | null = null;
+    let bestScore = Infinity;
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      const to = e.position.clone().add(new THREE.Vector3(0, 1.1, 0)).sub(origin);
+      const dist = to.length();
+      if (dist > 75) continue;
+      const angle = to.normalize().angleTo(dir);
+      if (angle > 0.1) continue;
+      const score = angle * 12 + dist * 0.002;
+      if (score < bestScore) {
+        bestScore = score;
+        best = e;
+      }
+    }
+
+    if (!best) {
+      this.handle.hud.toast('Мимо.', 900);
+      return;
+    }
+    const killed = best.takeDamage(55);
+    if (killed) {
+      this.handle.hud.toast('Тварь пала от выстрела.', 2200);
+      this.quests.notify('kill', 1).forEach((q) => this.completeQuest(q.title));
+    } else {
+      this.handle.hud.toast('Попадание!', 1200);
     }
   }
 
@@ -1056,6 +1176,7 @@ export class GameStage implements Stage {
     });
     hud.setRescued(this.rescue.savedCount, this.rescue.total);
     hud.setHotbar(this.inventory);
+    hud.setAmmo(this.inventory.selectedSlot()?.id === 'rifle' ? this.inventory.countOf('bullet') : null);
 
     const main = this.quests.currentMain();
     if (main) {
@@ -1087,6 +1208,12 @@ export class GameStage implements Stage {
     this.handle.screens.clear();
     for (const e of this.enemies) e.dispose();
     this.enemies = [];
+    if (this.fireRing) {
+      this.fireRing.geometry.dispose();
+      this.fireRingMat?.dispose();
+      this.scene.remove(this.fireRing);
+      this.fireRing = null;
+    }
     this.rescue.dispose();
     this.building.dispose();
     this.campfire.dispose();

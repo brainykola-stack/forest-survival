@@ -353,62 +353,125 @@ export class World {
   // ------------------------------------------------------------------ постройки
 
   private buildBuildings(): void {
-    this.cabin(20, 12, 64, 10, 'Хижина у лагеря', true);
-    this.cabin(-54, -142, 68, 11, 'Хижина в долине', false);
-    this.cabin(-118, -48, 72, 12, 'Дом в старой деревне', false);
-    this.cabin(-138, -70, 60, 9, 'Сторожка', false);
+    this.house(20, 12, 9, 7, 1, 'Хижина у лагеря', true);
+    this.house(-54, -142, 8, 6.5, 1, 'Хижина в долине', false);
+    this.house(-118, -48, 11, 8, 2, 'Двухэтажный дом', false);
+    this.house(-138, -70, 8.5, 7, 1, 'Сторожка', false);
     this.watchtower(120, 86);
     this.campSite(112, -102);
     this.caveMouth(44, 152);
     this.ruin(-10, 128);
   }
 
-  private cabin(x: number, z: number, w: number, d: number, name: string, safe: boolean): void {
+  /**
+   * Дом: фундамент, стены, окна, двускатная крыша, крыльцо.
+   * При floors = 2 добавляются внутренние лестница и второй этаж.
+   */
+  private house(x: number, z: number, w: number, d: number, floors: number, name: string, safe: boolean): void {
     const y = this.terrain.heightAt(x, z);
     const halfW = w / 2;
     const halfD = d / 2;
-    const h = 2.8;
-    const wallMat = new THREE.MeshLambertMaterial({ color: safe ? 0x5a4a33 : 0x463d30 });
-    const floorMat = new THREE.MeshLambertMaterial({ color: 0x3a3226 });
-    const roofMat = new THREE.MeshLambertMaterial({ color: 0x2f2a22 });
+    const floorH = 2.7;
+    const h = floorH * floors;
+    const wallMat = new THREE.MeshLambertMaterial({ color: safe ? 0x6b5a3e : 0x4d4436 });
+    const trimMat = new THREE.MeshLambertMaterial({ color: 0x33291d });
+    const floorMat = new THREE.MeshLambertMaterial({ color: 0x453728 });
+    const roofMat = new THREE.MeshLambertMaterial({ color: 0x2a241d });
+    const glassMat = new THREE.MeshLambertMaterial({ color: 0x3a4a55, emissive: 0xffb060, emissiveIntensity: 0.55 });
+    const stoneMat = new THREE.MeshLambertMaterial({ color: 0x6a665c });
 
-    const addBox = (px: number, py: number, pz: number, sx: number, sy: number, sz: number, mat: THREE.Material) => {
+    const add = (px: number, py: number, pz: number, sx: number, sy: number, sz: number, mat: THREE.Material, solid = true) => {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
       mesh.position.set(px, py, pz);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       this.group.add(mesh);
+      if (solid) this.addBoxCollider(px, py, pz, sx / 2, sy / 2, sz / 2);
+      return mesh;
     };
 
-    // фундамент и пол
-    addBox(x, y + 0.1, z, w, 0.4, d, floorMat);
-    this.addBoxCollider(x, y + 0.2, z, halfW, 0.2, halfD);
+    // Фундамент и пол первого этажа
+    add(x, y + 0.15, z, w + 0.6, 0.5, d + 0.6, stoneMat);
+    add(x, y + 0.42, z, w, 0.1, d, floorMat, false);
 
-    // стены: передняя с проёмом
-    const doorW = 1.6;
+    // Стены. Передняя — с проёмом двери на первом этаже.
+    const doorW = 1.7;
+    const doorH = 2.2;
     const sideW = (w - doorW) / 2;
-    addBox(x - (doorW / 2 + sideW / 2), y + h / 2, z + halfD, sideW, h, 0.3, wallMat);
-    addBox(x + (doorW / 2 + sideW / 2), y + h / 2, z + halfD, sideW, h, 0.3, wallMat);
-    addBox(x, y + h / 2, z - halfD, w, h, 0.3, wallMat);
-    addBox(x - halfW, y + h / 2, z, 0.3, h, d, wallMat);
-    addBox(x + halfW, y + h / 2, z, 0.3, h, d, wallMat);
-    this.addBoxCollider(x, y + h / 2, z - halfD, halfW, h / 2, 0.15);
-    this.addBoxCollider(x - halfW, y + h / 2, z, 0.15, h / 2, halfD);
-    this.addBoxCollider(x + halfW, y + h / 2, z, 0.15, h / 2, halfD);
+    add(x - (doorW / 2 + sideW / 2), y + floorH / 2 + 0.45, z + halfD, sideW, floorH, 0.28, wallMat);
+    add(x + (doorW / 2 + sideW / 2), y + floorH / 2 + 0.45, z + halfD, sideW, floorH, 0.28, wallMat);
+    add(x, y + doorH + (floorH - doorH) / 2 + 0.45, z + halfD, doorW, floorH - doorH, 0.28, wallMat, false);
+    if (floors > 1) {
+      add(x, y + floorH * 1.5 + 0.45, z + halfD, w, floorH, 0.28, wallMat);
+    }
+    add(x, y + h / 2 + 0.45, z - halfD, w, h, 0.28, wallMat);
+    add(x - halfW, y + h / 2 + 0.45, z, 0.28, h, d, wallMat);
+    add(x + halfW, y + h / 2 + 0.45, z, 0.28, h, d, wallMat);
 
-    // крыша
-    addBox(x, y + h + 0.25, z, w + 1.2, 0.5, d + 1.2, roofMat);
+    // Дверная рама и крыльцо
+    add(x - doorW / 2 - 0.08, y + doorH / 2 + 0.45, z + halfD + 0.02, 0.16, doorH, 0.36, trimMat);
+    add(x + doorW / 2 + 0.08, y + doorH / 2 + 0.45, z + halfD + 0.02, 0.16, doorH, 0.36, trimMat);
+    add(x, y + 0.45 + doorH + 0.08, z + halfD + 0.02, doorW + 0.3, 0.16, 0.36, trimMat);
+    add(x, y + 0.2, z + halfD + 0.8, doorW + 0.8, 0.2, 1.4, floorMat);
+    add(x - doorW / 2 - 0.3, y + 0.9, z + halfD + 1.3, 0.16, 1.6, 0.16, trimMat);
+    add(x + doorW / 2 + 0.3, y + 0.9, z + halfD + 1.3, 0.16, 1.6, 0.16, trimMat);
 
-    // стол и ящики внутри
-    addBox(x + halfW - 1.2, y + 0.8, z - halfD + 1.2, 1.2, 0.9, 0.8, new THREE.MeshLambertMaterial({ color: 0x4a3b28 }));
-    addBox(x - halfW + 1.1, y + 0.5, z + halfD - 1.1, 0.9, 0.9, 0.9, new THREE.MeshLambertMaterial({ color: 0x5a4a30 }));
-    this.addBoxCollider(x + halfW - 1.2, y + 0.8, z - halfD + 1.2, 0.6, 0.45, 0.4);
-    this.addBoxCollider(x - halfW + 1.1, y + 0.5, z + halfD - 1.1, 0.45, 0.45, 0.45);
+    // Окна: по два на передней и задней стене, по одному на боковых
+    const win = (px: number, py: number, pz: number, sx: number, sz: number) => {
+      add(px, py, pz, sx, 1.05, sz, glassMat, false);
+      add(px, py - 0.6, pz, sx + 0.18, 0.12, sz + 0.18, trimMat, false);
+      add(px, py + 0.6, pz, sx + 0.18, 0.12, sz + 0.18, trimMat, false);
+    };
+    for (let f = 0; f < floors; f++) {
+      const wy = y + 1.55 + f * floorH;
+      const off = halfD + 0.15;
+      win(x - halfW * 0.45, wy, z + off, 1.1, 0.08);
+      win(x + halfW * 0.45, wy, z + off, 1.1, 0.08);
+      win(x - halfW * 0.45, wy, z - off, 1.1, 0.08);
+      win(x + halfW * 0.45, wy, z - off, 1.1, 0.08);
+      win(x - halfW - 0.15, wy, z, 0.08, 1.1);
+    }
 
-    // свет внутри
-    const lamp = new THREE.PointLight(0xffb861, safe ? 9 : 5, 14, 2);
-    lamp.position.set(x, y + h - 0.3, z);
+    // Второй этаж: плита с проёмом под лестницу
+    if (floors > 1) {
+      const stairW = 1.5;
+      add(x + (halfW - stairW) / 2 + stairW / 2, y + floorH + 0.45, z, w - stairW, 0.18, d, floorMat);
+      // Лестница вдоль левой стены
+      const steps = 8;
+      for (let i = 0; i < steps; i++) {
+        const sy = y + 0.55 + (i + 0.5) * ((floorH - 0.4) / steps);
+        const sz = z - halfD + 0.9 + i * ((d - 1.2) / steps);
+        add(x - halfW + stairW / 2 + 0.1, sy, sz, stairW, (floorH - 0.4) / steps, (d - 1.2) / steps + 0.06, trimMat);
+      }
+    }
+
+    // Двускатная крыша
+    const pitch = 0.5; // ~28°
+    const slopeLen = (halfW + 0.7) / Math.cos(pitch);
+    const ridgeY = y + h + 0.45 + Math.tan(pitch) * halfW;
+    const left = add(x - halfW / 2, (y + h + 0.45 + ridgeY) / 2, z, slopeLen, 0.22, d + 1.4, roofMat, false);
+    left.rotation.z = pitch;
+    const right = add(x + halfW / 2, (y + h + 0.45 + ridgeY) / 2, z, slopeLen, 0.22, d + 1.4, roofMat, false);
+    right.rotation.z = -pitch;
+    add(x + halfW * 0.45, ridgeY + 0.7, z - halfD * 0.4, 0.8, 1.6, 0.8, stoneMat, false);
+
+    // Мебель
+    add(x + halfW - 1.2, y + 0.95, z - halfD + 1.2, 1.3, 0.12, 0.9, trimMat);
+    add(x + halfW - 1.2, y + 0.62, z - halfD + 1.2, 0.14, 0.66, 0.7, trimMat, false);
+    add(x - halfW + 1.1, y + 0.75, z + halfD - 1.2, 0.9, 0.9, 0.9, new THREE.MeshLambertMaterial({ color: 0x5a4a30 }));
+    if (floors > 1) {
+      add(x + halfW - 1.4, y + floorH + 0.65, z - halfD + 1.6, 1.2, 0.4, 2.0, new THREE.MeshLambertMaterial({ color: 0x4b3c2c }));
+    }
+
+    // Свет внутри
+    const lamp = new THREE.PointLight(0xffb861, safe ? 10 : 6, 16, 2);
+    lamp.position.set(x, y + floorH - 0.2, z);
     this.group.add(lamp);
+    if (floors > 1) {
+      const lamp2 = new THREE.PointLight(0xffb861, 5, 12, 2);
+      lamp2.position.set(x, y + h - 0.2, z);
+      this.group.add(lamp2);
+    }
 
     this.buildings.push({ name, x, z, size: Math.max(halfW, halfD) });
   }

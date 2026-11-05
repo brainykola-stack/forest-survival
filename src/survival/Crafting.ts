@@ -55,12 +55,21 @@ export const RECIPES: Recipe[] = [
     description: 'Восстанавливает 30 здоровья.',
   },
   {
-    id: 'workbench',
-    name: 'Рабочий стол',
-    icon: '🛠️',
-    result: { id: 'wood', count: 0 },
-    cost: { wood: 8, stone: 4 },
-    description: 'Чертежи, требующие стола, станут доступны. Ставится из меню строительства.',
+    id: 'rifle',
+    name: 'Ружьё',
+    icon: '🔫',
+    result: { id: 'rifle', count: 1 },
+    cost: { wood: 8, metal: 8, fiber: 4 },
+    requiresWorkbench: true,
+    description: 'Дальний бой. Требует патронов, зато валит тварь с двух выстрелов.',
+  },
+  {
+    id: 'bullet',
+    name: 'Патроны ×3',
+    icon: '🧨',
+    result: { id: 'bullet', count: 3 },
+    cost: { metal: 2, stone: 1 },
+    description: 'Самокрутные патроны для ружья.',
   },
 ];
 

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Terrain } from '../world/Terrain';
 import { modelLibrary, type ModelInstance } from '../core/ModelLibrary';
+import { steerAroundSafeZone, type SafeZone } from './SafeZone';
 
 export type EnemyKind = 'deer' | 'hunter' | 'crawler' | 'bog';
 export type AIState = 'idle' | 'patrol' | 'investigate' | 'chase' | 'attack' | 'search' | 'return';
@@ -12,6 +13,8 @@ export interface AIContext {
   physics: RAPIER.World;
   playerLit: boolean;
   playerRunning: boolean;
+  /** Зона защиты костра: пока огонь горит, внутрь не пускает. */
+  safe?: SafeZone | null;
 }
 
 interface Model {
@@ -247,6 +250,11 @@ export class Enemy {
     if (aheadH < 0.35 && this.kind !== 'bog') {
       dir.multiplyScalar(-1);
     }
+
+    // Круг костра: пока горит — внутрь нельзя, только вдоль границы.
+    const steered = steerAroundSafeZone(this.position, { x: dir.x, z: dir.z }, ctx.safe ?? null);
+    dir.x = steered.x;
+    dir.z = steered.z;
 
     const step = speed * dt;
     this.position.addScaledVector(dir, step);

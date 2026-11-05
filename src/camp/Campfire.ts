@@ -8,7 +8,10 @@ export class Campfire {
   /** Множитель расхода топлива: в холодные ночи огонь ест дрова быстрее. */
   drainMultiplier = 1;
   readonly maxFuel = 100;
+  /** Радиус защитного круга: пока огонь горит, твари не заходят внутрь. */
+  readonly guardRadius = 12;
   readonly position: THREE.Vector3;
+  private alert: THREE.Sprite | null = null;
 
   private light: THREE.PointLight;
   private flame: THREE.Mesh;
@@ -79,6 +82,9 @@ export class Campfire {
     this.group.add(this.embers);
 
     // Дым
+    this.alert = this.createAlertSprite();
+    if (this.alert) this.group.add(this.alert);
+
     const smokeCount = 30;
     this.smokeData = new Float32Array(smokeCount * 3);
     for (let i = 0; i < smokeCount; i++) {
@@ -98,6 +104,41 @@ export class Campfire {
   get intensity(): number {
     if (!this.lit) return 0;
     return Math.max(0.12, Math.min(1, this.fuel / 40));
+  }
+
+  /** Пока огонь горит — зона защиты действует. */
+  get guardActive(): boolean {
+    return this.lit && this.fuel > 0;
+  }
+
+  /** Красный «!» с подписью над погасшим костром. */
+  private createAlertSprite(): THREE.Sprite | null {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.clearRect(0, 0, 512, 256);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff3b2f';
+    ctx.font = 'bold 150px Georgia, serif';
+    ctx.shadowColor = 'rgba(0,0,0,0.85)';
+    ctx.shadowBlur = 18;
+    ctx.fillText('!', 256, 126);
+    ctx.fillStyle = '#ffd7d0';
+    ctx.font = 'bold 46px Arial, sans-serif';
+    ctx.fillText('Костёр потух!', 256, 210);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(7, 3.5, 1);
+    sprite.position.y = 4.2;
+    sprite.visible = false;
+    sprite.renderOrder = 999;
+    return sprite;
   }
 
   addFuel(amount: number): void {
@@ -131,6 +172,16 @@ export class Campfire {
 
     this.flame.visible = this.lit;
     this.flame2.visible = this.lit;
+
+    // Предупреждение над погасшим костром.
+    if (this.alert) {
+      this.alert.visible = !this.lit;
+      if (this.alert.visible) {
+        const mat = this.alert.material as THREE.SpriteMaterial;
+        mat.opacity = 0.72 + Math.sin(this.time * 4.2) * 0.28;
+      }
+    }
+
     if (this.lit) {
       const s = 0.55 + inten * 0.75;
       this.flame.scale.set(s, s * (0.9 + Math.sin(this.time * 9) * 0.12), s);
@@ -190,6 +241,11 @@ export class Campfire {
         const m = o.material as THREE.Material | THREE.Material[];
         if (Array.isArray(m)) m.forEach((x) => x.dispose());
         else m.dispose();
+      }
+      if (o instanceof THREE.Sprite) {
+        const m = o.material as THREE.SpriteMaterial;
+        m.map?.dispose();
+        m.dispose();
       }
     });
   }

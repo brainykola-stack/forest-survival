@@ -305,6 +305,19 @@ export class AudioEngine {
     o2.stop(t + 1.25);
   }
 
+  /** Выстрел: резкий хлопок с низким ударом. */
+  shot(): void {
+    this.ensure();
+    if (!this.ctx) return;
+    this.noiseHit(0.22, 900, 0.32, 0.8);
+    this.blip(90, 0.18, 'square', 0.16, 40);
+  }
+
+  /** Щелчок пустого магазина. */
+  dryFire(): void {
+    this.blip(1400, 0.05, 'square', 0.05, 900);
+  }
+
   heartbeat(intensity = 1): void {
     this.ensure();
     if (!this.ctx) return;
