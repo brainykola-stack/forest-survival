@@ -111,6 +111,7 @@ export class GameStage implements Stage {
 
     this.buildCharm();
     this.prebuildCamp();
+    this.maybeSpawnShowcaseStag();
 
     if (save) this.applySave(save);
     else {
@@ -131,6 +132,25 @@ export class GameStage implements Stage {
     this.building.restore([
       { id: 'camp_workbench', x: 3.2, y: y + 0.5, z: 0, rot: Math.PI / 2, kind: 'workbench' },
     ]);
+  }
+
+  /**
+   * Демонстрационный олень у костра. Включается только флагом в адресе:
+   * `?deer=1`. На обычную игру не влияет.
+   */
+  private maybeSpawnShowcaseStag(): void {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('deer')) return;
+
+    const x = 4.5;
+    const z = -3.5;
+    const y = this.world.heightAt(x, z);
+    const stag = new Enemy('deer', new THREE.Vector3(x, y, z), this.scene);
+    stag.passive = true;
+    stag.heading = Math.atan2(this.campfire.position.x - x, this.campfire.position.z - z);
+    this.enemies.push(stag);
+    this.handle.hud.toast('Тестовый олень у костра: он не нападает.', 6000);
   }
 
   private buildCharm(): void {
@@ -353,10 +373,10 @@ export class GameStage implements Stage {
       }
     }
 
-    // Утро — твари уходят
+    // Утро — твари уходят (демонстрационный олень остаётся стоять)
     if (!this.dayNight.isNight && nightNow < 0.2 && this.enemies.length > 0 && Math.random() < dt * 0.6) {
-      const e = this.enemies[0];
-      e.takeDamage(999);
+      const e = this.enemies.find((x) => !x.passive);
+      if (e) e.takeDamage(999);
     }
   }
 

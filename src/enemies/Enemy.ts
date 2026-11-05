@@ -50,6 +50,8 @@ export class Enemy {
   position = new THREE.Vector3();
   heading = 0;
   alive = true;
+  /** Тестовый режим: стоит на месте и не охотится (см. флаг ?deer=1). */
+  passive = false;
   lastKnown: THREE.Vector3 | null = null;
   private model: Model;
   private model3d: ModelInstance | null = null;
@@ -88,6 +90,15 @@ export class Enemy {
   update(dt: number, ctx: AIContext): { attacked: boolean } {
     if (!this.alive) return { attacked: false };
     this.time += dt;
+
+    if (this.passive) {
+      // Демонстрационный олень: только дышит и осматривается.
+      this.speedActual = 0;
+      this.updateModel3d(dt);
+      this.applyTransform(ctx);
+      return { attacked: false };
+    }
+
     this.attackCd = Math.max(0, this.attackCd - dt);
     this.stateTimer += dt;
 
