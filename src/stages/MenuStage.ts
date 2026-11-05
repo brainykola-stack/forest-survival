@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Stage, GameHandle } from '../core/Stage';
+import { modelLibrary, type ModelInstance } from '../core/ModelLibrary';
 
 /** Живой фон главного меню: ночной лес, туман, силуэт оленя. */
 export class MenuStage implements Stage {
@@ -7,6 +8,7 @@ export class MenuStage implements Stage {
   readonly camera: THREE.PerspectiveCamera;
   private time = 0;
   private deer: THREE.Group;
+  private deerModel: ModelInstance | null = null;
   private fireflies: THREE.Points;
   private fireData: Float32Array;
   private disposables: Array<THREE.BufferGeometry | THREE.Material> = [];
@@ -34,7 +36,7 @@ export class MenuStage implements Stage {
     this.disposables.push(ground.geometry, ground.material as THREE.Material);
 
     this.buildTrees();
-    this.deer = this.buildDeer();
+    this.deer = this.buildStag() ?? this.buildDeer();
 
     // Светлячки
     const count = 90;
@@ -83,6 +85,19 @@ export class MenuStage implements Stage {
     this.disposables.push(trunkGeo, leafGeo, trunkMat, leafMat);
   }
 
+  /** Настоящая модель оленя между деревьями; если не загрузилась — силуэт. */
+  private buildStag(): THREE.Group | null {
+    const instance = modelLibrary.create('stag', 4.4);
+    if (!instance) return null;
+    instance.play('Idle', 0);
+    const group = new THREE.Group();
+    group.add(instance.root);
+    group.position.set(-4, 0, -34);
+    group.rotation.y = 0.35;
+    this.deerModel = instance;
+    return group;
+  }
+
   private buildDeer(): THREE.Group {
     const group = new THREE.Group();
     const dark = new THREE.MeshLambertMaterial({ color: 0x0a0a0a });
@@ -128,6 +143,7 @@ export class MenuStage implements Stage {
 
     this.deer.position.x = -4 + Math.sin(this.time * 0.13) * 2.2;
     this.deer.rotation.y = 0.35 + Math.sin(this.time * 0.21) * 0.12;
+    this.deerModel?.update(dt);
 
     const pos = this.fireflies.geometry.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < pos.count; i++) {
@@ -145,6 +161,7 @@ export class MenuStage implements Stage {
   }
 
   dispose(): void {
+    this.deerModel?.dispose();
     for (const d of this.disposables) d.dispose();
     this.scene.clear();
   }
