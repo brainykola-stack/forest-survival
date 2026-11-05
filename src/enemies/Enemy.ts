@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Terrain } from '../world/Terrain';
+import { modelLibrary, type ModelInstance } from '../core/ModelLibrary';
 
 export type EnemyKind = 'deer' | 'hunter' | 'crawler' | 'bog';
 export type AIState = 'idle' | 'patrol' | 'investigate' | 'chase' | 'attack' | 'search' | 'return';
@@ -51,6 +52,7 @@ export class Enemy {
   alive = true;
   lastKnown: THREE.Vector3 | null = null;
   private model: Model;
+  private model3d: ModelInstance | null = null;
   private time = 0;
   private stateTimer = 0;
   attackCd = 0;
@@ -152,8 +154,20 @@ export class Enemy {
         break;
     }
 
+    this.updateModel3d(dt);
     this.applyTransform(ctx);
     return { attacked: false };
+  }
+
+  /** Анимации скелетной модели по состоянию ИИ. */
+  private updateModel3d(dt: number): void {
+    if (!this.model3d) return;
+    this.model3d.update(dt);
+    let anim = 'Idle';
+    if (this.state === 'attack') anim = 'Attack_Headbutt';
+    else if (this.state === 'chase') anim = 'Gallop';
+    else if (this.speedActual > 0.4) anim = 'Walk';
+    this.model3d.play(anim);
   }
 
   private attackTick(dt: number, ctx: AIContext, dist: number): boolean {
@@ -320,6 +334,11 @@ export class Enemy {
 
   dispose(): void {
     this.scene.remove(this.group);
+    if (this.model3d) {
+      // Ресурсы внешней модели общие: освобождаем только экземпляр.
+      this.model3d.dispose();
+      return;
+    }
     this.group.traverse((o) => {
       if (o instanceof THREE.Mesh) {
         o.geometry.dispose();
@@ -333,10 +352,35 @@ export class Enemy {
   // ------------------------------------------------------------------ модели
 
   private buildModel(kind: EnemyKind): Model {
-    if (kind === 'deer') return this.buildDeer();
+    if (kind === 'deer') return this.buildStag() ?? this.buildDeer();
     if (kind === 'hunter') return this.buildHunter();
     if (kind === 'crawler') return this.buildCrawler();
     return this.buildBog();
+  }
+
+  /**
+   * Модель оленя из бесплатного пака Quaternius (CC0): скелет, анимации,
+   * тёмная шкура. Если файл не загрузился — используется процедурная заглушка.
+   */
+  private buildStag(): Model | null {
+    const instance = modelLibrary.create('stag', 3.6);
+    if (!instance) return null;
+    const root = instance.root;
+
+    // Глаза светятся: источник света на голове, чтобы силуэт читался в темноте.
+    let headBone: THREE.Object3D | null = null;
+    root.traverse((o) => {
+      if (!headBone && o.name && /head/i.test(o.name)) headBone = o;
+    });
+    const glow = new THREE.PointLight(0xff4a1a, 2.0, 9, 2);
+    (headBone ?? root).add(glow);
+
+    const group = new THREE.Group();
+    group.add(root);
+    this.model3d = instance;
+    instance.play('Idle', 0);
+
+    return { group, legs: [], head: null, eyes: [] };
   }
 
   private buildDeer(): Model {

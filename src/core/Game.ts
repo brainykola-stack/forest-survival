@@ -5,6 +5,7 @@ import { AudioEngine } from './Audio';
 import { InputManager } from './InputManager';
 import { SaveManager, type SaveData } from './SaveManager';
 import { RecoveryState } from './RecoveryState';
+import { modelLibrary } from './ModelLibrary';
 import type { Stage, GameHandle } from './Stage';
 import { HUD } from '../ui/HUD';
 import { Screens } from '../ui/Screens';
@@ -77,6 +78,8 @@ export class Game implements GameHandle {
 
   async start(): Promise<void> {
     await RAPIER.init();
+    // Модели грузим до меню: к старту игры они уже в памяти.
+    await modelLibrary.loadAll();
     this.toMenu(true);
     document.getElementById('boot-screen')?.classList.add('hidden');
     window.setTimeout(() => document.getElementById('boot-screen')?.remove(), 900);
