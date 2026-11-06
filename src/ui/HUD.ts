@@ -49,6 +49,7 @@ export class HUD {
       <div class="interact hidden"></div>
       <div class="toast-stack"></div>
       <div class="night-banner hidden"></div>
+      <div class="vignette"></div>
       <div class="damage-flash"></div>
       <div class="fps"></div>
     `;
