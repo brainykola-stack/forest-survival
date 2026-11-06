@@ -39,7 +39,8 @@ export class Game implements GameHandle {
     private uiRoot: HTMLElement,
   ) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * this.settings.data.renderScale);
+    // Плотность пикселей не выше 1.5: удвоение на ноутбуках бьёт по кадрам сильнее всего.
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5) * this.settings.data.renderScale);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -113,7 +114,7 @@ export class Game implements GameHandle {
   private applySettings(): void {
     const preset = this.settings.qualityPreset;
     const scale = THREE.MathUtils.clamp(this.settings.data.renderScale, 0.4, 1.3);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * scale * (preset.pixelRatio / 1.0));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5) * scale * preset.pixelRatio);
     this.renderer.shadowMap.enabled = preset.shadows;
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.audio.setVolumes(this.settings.data.musicVolume, this.settings.data.sfxVolume);

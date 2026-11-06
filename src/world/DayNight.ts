@@ -90,11 +90,11 @@ export class DayNight {
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(1024, 1024);
     this.sun.shadow.camera.near = 1;
-    this.sun.shadow.camera.far = 260;
-    this.sun.shadow.camera.left = -60;
-    this.sun.shadow.camera.right = 60;
-    this.sun.shadow.camera.top = 60;
-    this.sun.shadow.camera.bottom = -60;
+    this.sun.shadow.camera.far = 150;
+    this.sun.shadow.camera.left = -45;
+    this.sun.shadow.camera.right = 45;
+    this.sun.shadow.camera.top = 45;
+    this.sun.shadow.camera.bottom = -45;
     this.sun.shadow.bias = -0.0008;
     scene.add(this.sun);
     scene.add(this.sun.target);

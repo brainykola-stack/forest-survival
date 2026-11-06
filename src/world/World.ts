@@ -183,7 +183,8 @@ export class World {
     const leaves = new THREE.InstancedMesh(foliageGeo, leafMat, trees.length);
     trunks.castShadow = true;
     trunks.receiveShadow = true;
-    leaves.castShadow = true;
+    // Листва не отбрасывает тени: это самая тяжёлая часть теневого прохода.
+    leaves.castShadow = false;
     leaves.receiveShadow = true;
 
     const m = new THREE.Matrix4();
@@ -470,14 +471,10 @@ export class World {
     }
 
     // Свет внутри
-    const lamp = new THREE.PointLight(0xffb861, safe ? 10 : 6, 16, 2);
-    lamp.position.set(x, y + floorH - 0.2, z);
+    // Один источник на дом: каждый лишний PointLight заметно стоит кадров.
+    const lamp = new THREE.PointLight(0xffb861, safe ? 9 : 5, 16, 2);
+    lamp.position.set(x, y + Math.min(h, floorH + 1) - 0.2, z);
     this.group.add(lamp);
-    if (floors > 1) {
-      const lamp2 = new THREE.PointLight(0xffb861, 5, 12, 2);
-      lamp2.position.set(x, y + h - 0.2, z);
-      this.group.add(lamp2);
-    }
 
     this.buildings.push({ name, x, z, size: Math.max(halfW, halfD) });
     this.houseProps(x, z, w, d);
@@ -528,9 +525,13 @@ export class World {
     add(x + 2.2, y + 0.45, z + d / 2 + 2.1, 1.8, 0.12, 0.5, wood);
     add(x - 2.2, y + 1.1, z + d / 2 + 2.2, 0.16, 2.2, 0.16, dark);
     add(x - 2.2, y + 2.2, z + d / 2 + 2.2, 0.34, 0.34, 0.34, stone);
-    const lantern = new THREE.PointLight(0xffb861, 4, 10, 2);
-    lantern.position.set(x - 2.2, y + 2.25, z + d / 2 + 2.2);
-    this.group.add(lantern);
+    // Фонарь светится материалом, без дополнительного источника света.
+    const cap = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 0.4, 0.3),
+      new THREE.MeshLambertMaterial({ color: 0xffc070, emissive: 0xffa040, emissiveIntensity: 1.4 }),
+    );
+    cap.position.set(x - 2.2, y + 2.25, z + d / 2 + 2.2);
+    this.group.add(cap);
   }
 
   private watchtower(x: number, z: number): void {

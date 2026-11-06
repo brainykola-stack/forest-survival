@@ -6,6 +6,30 @@ import type { Terrain } from '../world/Terrain';
 import { PlayerStats } from './PlayerStats';
 import { modelLibrary, type ModelInstance } from '../core/ModelLibrary';
 
+/** Размер и положение предмета в руке. length — желаемая длина в метрах. */
+const HELD_CONFIG: Record<string, { key?: string; length: number; pos: [number, number, number] }> = {
+  axe: { key: 'axe', length: 0.5, pos: [0.23, -0.24, -0.42] },
+  torch: { key: 'torch', length: 0.45, pos: [0.25, -0.24, -0.45] },
+  rifle: { key: 'shotgun', length: 0.58, pos: [0.19, -0.2, -0.42] },
+  spear: { length: 1.3, pos: [0.22, -0.26, -0.55] },
+  pickaxe: { length: 0.62, pos: [0.23, -0.24, -0.45] },
+};
+
+/** Разворачивает предмет самой длинной осью вперёд (-Z). */
+function orientForward(root: THREE.Object3D): void {
+  const box = new THREE.Box3().setFromObject(root);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  if (size.y >= size.x && size.y >= size.z) {
+    root.rotation.x = -Math.PI / 2;
+  } else if (size.x >= size.z) {
+    root.rotation.y = Math.PI / 2;
+  } else {
+    // Длинная ось уже Z: разворачиваем, чтобы «дуло» смотрело от игрока.
+    root.rotation.y = Math.PI;
+  }
+}
+
 /** Игрок от первого лица: кинематический контроллер Rapier, камера, покачивание. */
 export class Player {
   readonly camera: THREE.PerspectiveCamera;
@@ -111,40 +135,46 @@ export class Player {
     }
     if (!id) return;
 
+    const cfg = HELD_CONFIG[id];
+    if (!cfg) return;
+
     const group = new THREE.Group();
-    group.position.set(0.26, -0.26, -0.55);
-    group.rotation.set(0.05, -0.35, 0.15);
+    group.position.set(cfg.pos[0], cfg.pos[1], cfg.pos[2]);
+    group.rotation.set(0.12, -0.22, 0.08);
     this.camera.add(group);
     this.weaponGroup = group;
 
-    const modelKey = id === 'axe' ? 'axe' : id === 'torch' ? 'torch' : id === 'rifle' ? 'shotgun' : null;
-    if (modelKey) {
-      const instance = modelLibrary.create(modelKey, 0.85);
+    if (cfg.key) {
+      const instance = modelLibrary.create(cfg.key, cfg.length);
       if (instance) {
-        instance.root.position.y -= 0.35;
+        orientForward(instance.root);
+        // Центрируем модель в руке, чтобы она не уезжала в камеру.
+        const box = new THREE.Box3().setFromObject(instance.root);
+        const center = box.getCenter(new THREE.Vector3());
+        instance.root.position.sub(center);
         group.add(instance.root);
         this.heldModel = instance;
         return;
       }
     }
 
-    // Процедурный запасной вариант: копьё, кирка и прочее.
+    // Процедурный запасной вариант: копьё и кирка.
     const wood = new THREE.MeshLambertMaterial({ color: 0x6b4a2c });
     const metal = new THREE.MeshLambertMaterial({ color: 0x2b2b30 });
     if (id === 'spear') {
-      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 1.6, 6), wood);
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 1.4, 6), wood);
       shaft.rotation.x = Math.PI / 2;
-      shaft.position.set(0, 0, -0.55);
-      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.25, 6), metal);
+      shaft.position.set(0, 0, -0.6);
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.22, 6), metal);
       tip.rotation.x = -Math.PI / 2;
-      tip.position.set(0, 0, -1.4);
+      tip.position.set(0, 0, -1.35);
       group.add(shaft, tip);
     } else if (id === 'pickaxe') {
-      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.025, 1.0, 6), wood);
+      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.022, 0.85, 6), wood);
       handle.rotation.x = Math.PI / 2;
-      handle.position.set(0, 0, -0.5);
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.07, 0.07), metal);
-      head.position.set(0, 0.02, -0.95);
+      handle.position.set(0, 0, -0.45);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.06, 0.06), metal);
+      head.position.set(0, 0.02, -0.85);
       head.rotation.z = 0.25;
       group.add(handle, head);
     }

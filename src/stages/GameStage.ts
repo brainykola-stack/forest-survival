@@ -147,7 +147,7 @@ export class GameStage implements Stage {
   /** Волки-сторожа у каждой пещеры: они не уходят утром. */
   private spawnCaveGuards(): void {
     for (const cave of this.world.caveSites) {
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < 1; i++) {
         const a = (i / 2) * Math.PI * 2 + 0.7;
         const x = cave.x + Math.cos(a) * 8;
         const z = cave.z + Math.sin(a) * 8;
