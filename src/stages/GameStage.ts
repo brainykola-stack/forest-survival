@@ -546,6 +546,10 @@ export class GameStage implements Stage {
     if (!params.has('kit')) return;
     this.inventory.add('rifle', 1);
     this.inventory.add('bullet', 12);
+    this.inventory.add('axe', 1);
+    this.inventory.add('pickaxe', 1);
+    this.inventory.add('torch', 1);
+    this.inventory.add('spear', 1);
     this.inventory.add('wood', 20);
     this.inventory.add('stone', 20);
     this.inventory.add('metal', 10);
