@@ -8,11 +8,11 @@ import { modelLibrary, type ModelInstance } from '../core/ModelLibrary';
 
 /** Размер и положение предмета в руке. length — желаемая длина в метрах. */
 const HELD_CONFIG: Record<string, { key?: string; length: number; pos: [number, number, number] }> = {
-  axe: { key: 'axe', length: 0.5, pos: [0.23, -0.24, -0.42] },
-  torch: { key: 'torch', length: 0.45, pos: [0.25, -0.24, -0.45] },
-  rifle: { key: 'shotgun', length: 0.58, pos: [0.19, -0.2, -0.42] },
-  spear: { length: 1.3, pos: [0.22, -0.26, -0.55] },
-  pickaxe: { length: 0.62, pos: [0.23, -0.24, -0.45] },
+  axe: { key: 'axe', length: 0.42, pos: [0.24, -0.26, -0.5] },
+  torch: { key: 'torch', length: 0.36, pos: [0.26, -0.26, -0.5] },
+  rifle: { key: 'shotgun', length: 0.5, pos: [0.2, -0.22, -0.5] },
+  spear: { length: 1.05, pos: [0.2, -0.3, -0.6] },
+  pickaxe: { length: 0.48, pos: [0.24, -0.26, -0.5] },
 };
 
 /** Разворачивает предмет самой длинной осью вперёд (-Z). */
@@ -145,13 +145,10 @@ export class Player {
     this.weaponGroup = group;
 
     if (cfg.key) {
-      const instance = modelLibrary.create(cfg.key, cfg.length);
+      // 'longest' — нормируем по длинной оси, иначе ружьё растягивается втрое.
+      const instance = modelLibrary.create(cfg.key, cfg.length, 'longest');
       if (instance) {
         orientForward(instance.root);
-        // Центрируем модель в руке, чтобы она не уезжала в камеру.
-        const box = new THREE.Box3().setFromObject(instance.root);
-        const center = box.getCenter(new THREE.Vector3());
-        instance.root.position.sub(center);
         group.add(instance.root);
         this.heldModel = instance;
         return;

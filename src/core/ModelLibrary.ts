@@ -80,9 +80,10 @@ export class ModelLibrary {
 
   /**
    * Клон модели с готовым микшером анимаций.
-   * targetHeight — желаемая высота в метрах, модель нормализуется по ней.
+   * mode 'height' — нормировать по высоте (животные, ставятся на землю),
+   * mode 'longest' — по самой длинной оси (предметы в руках).
    */
-  create(key: string, targetHeight: number): ModelInstance | null {
+  create(key: string, target: number, mode: 'height' | 'longest' = 'height'): ModelInstance | null {
     const entry = this.entries.get(key);
     if (!entry) return null;
 
@@ -100,21 +101,31 @@ export class ModelLibrary {
     // (меши отмасштабированы скином), поэтому меряем по костям.
     root.updateMatrixWorld(true);
     const before = measureHeight(root);
-    const scale = before.height > 0.0001 ? targetHeight / before.height : 1;
+    const scale =
+      mode === 'longest'
+        ? (before.maxDim > 0.0001 ? target / before.maxDim : 1)
+        : (before.height > 0.0001 ? target / before.height : 1);
     root.scale.setScalar(scale);
     root.updateMatrixWorld(true);
 
-    // Разворачиваем модель так, чтобы голова смотрела в +Z — это «вперёд» игры.
-    const head = findHead(root);
-    if (head) {
-      const hp = head.getWorldPosition(new THREE.Vector3());
-      const centerZ = before.centerZ * scale;
-      if (hp.z < centerZ) root.rotation.y = Math.PI;
-      root.updateMatrixWorld(true);
-    }
+    if (mode === 'height') {
+      // Разворачиваем модель так, чтобы голова смотрела в +Z — это «вперёд» игры.
+      const head = findHead(root);
+      if (head) {
+        const hp = head.getWorldPosition(new THREE.Vector3());
+        const centerZ = before.centerZ * scale;
+        if (hp.z < centerZ) root.rotation.y = Math.PI;
+        root.updateMatrixWorld(true);
+      }
 
-    const after = measureHeight(root);
-    root.position.y -= after.minY;
+      const after = measureHeight(root);
+      root.position.y -= after.minY;
+    } else {
+      // Предмет в руке: центрируем, чтобы он вращался вокруг своей середины.
+      const box = new THREE.Box3().setFromObject(root);
+      const center = box.getCenter(new THREE.Vector3());
+      root.position.sub(center);
+    }
 
     const mixer = new THREE.AnimationMixer(root);
     const actions = new Map<string, THREE.AnimationAction>();
@@ -171,7 +182,12 @@ function findHead(root: THREE.Object3D): THREE.Object3D | null {
 }
 
 /** Высота и центр по костям (или по геометрии, если скелета нет). */
-function measureHeight(root: THREE.Object3D): { height: number; minY: number; centerZ: number } {
+function measureHeight(root: THREE.Object3D): {
+  height: number;
+  minY: number;
+  centerZ: number;
+  maxDim: number;
+} {
   const box = new THREE.Box3();
   const v = new THREE.Vector3();
   let bones = 0;
@@ -188,7 +204,12 @@ function measureHeight(root: THREE.Object3D): { height: number; minY: number; ce
   box.getSize(size);
   const center = new THREE.Vector3();
   box.getCenter(center);
-  return { height: size.y, minY: box.min.y, centerZ: center.z };
+  return {
+    height: size.y,
+    minY: box.min.y,
+    centerZ: center.z,
+    maxDim: Math.max(size.x, size.y, size.z),
+  };
 }
 
 export const modelLibrary = new ModelLibrary();
