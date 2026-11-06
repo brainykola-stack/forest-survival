@@ -126,6 +126,7 @@ export class GameStage implements Stage {
     this.prebuildCamp();
     this.maybeSpawnShowcaseStag();
     this.applyDebugKit();
+    this.applyDebugTeleport();
     if (!save) this.applyDebugStart();
 
     if (save) this.applySave(save);
@@ -507,6 +508,17 @@ export class GameStage implements Stage {
     this.fogBonus = mod.fog;
     this.campfire.drainMultiplier = mod.fireDrain;
     this.dayNight.setNightScale(mod.nightScale);
+  }
+
+  /** Телепорт для осмотра карты: `?tp=-118,-42` (x,z). */
+  private applyDebugTeleport(): void {
+    if (typeof window === 'undefined') return;
+    const raw = new URLSearchParams(window.location.search).get('tp');
+    if (!raw) return;
+    const [x, z] = raw.split(',').map(Number);
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+    this.player.teleport(x, z, this.world.heightAt(x, z) + 0.2);
+    this.handle.hud.toast(`Телепорт: ${Math.round(x)}, ${Math.round(z)}`, 3000);
   }
 
   /** Отладочный набор вещей: `?kit=1` — ружьё, патроны и материалы. */
