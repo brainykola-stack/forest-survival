@@ -63,6 +63,8 @@ export class Enemy {
   alive = true;
   /** Тестовый режим: стоит на месте и не охотится (см. флаг ?deer=1). */
   passive = false;
+  /** Сторож пещеры: не исчезает днём и не входит в ночной лимит. */
+  guardian = false;
   lastKnown: THREE.Vector3 | null = null;
   private model: Model;
   private model3d: ModelInstance | null = null;

@@ -123,6 +123,7 @@ export class GameStage implements Stage {
 
     this.buildCharm();
     this.buildFireRing();
+    this.spawnCaveGuards();
     this.prebuildCamp();
     this.maybeSpawnShowcaseStag();
     this.applyDebugKit();
@@ -142,6 +143,22 @@ export class GameStage implements Stage {
   }
 
   // ------------------------------------------------------------------ инициализация
+
+  /** Волки-сторожа у каждой пещеры: они не уходят утром. */
+  private spawnCaveGuards(): void {
+    for (const cave of this.world.caveSites) {
+      for (let i = 0; i < 2; i++) {
+        const a = (i / 2) * Math.PI * 2 + 0.7;
+        const x = cave.x + Math.cos(a) * 8;
+        const z = cave.z + Math.sin(a) * 8;
+        const y = this.world.heightAt(x, z);
+        const wolf = new Enemy('hunter', new THREE.Vector3(x, y, z), this.scene);
+        wolf.guardian = true;
+        wolf.home.set(x, y, z);
+        this.enemies.push(wolf);
+      }
+    }
+  }
 
   /** Белые пунктирные метки круга, за который не заходят твари. */
   private buildFireRing(): void {
@@ -384,8 +401,8 @@ export class GameStage implements Stage {
       this.torchOn = wantTorch;
       this.player.setTorch(wantTorch);
     }
-    // Ружьё в руках видно от первого лица.
-    this.player.setWeapon(slot?.id === 'rifle' ? 'rifle' : null);
+    // Предмет в руках: топор, факел, ружьё и прочее.
+    this.player.setHeldItem(slot?.id ?? null);
 
     if (this.charmMesh && !this.charmTaken) {
       this.charmMesh.rotation.y += dt * 1.4;
@@ -402,7 +419,8 @@ export class GameStage implements Stage {
     if (this.dayNight.isNight) {
       this.spawnTimer -= dt;
       const maxE = maxEnemiesForNight(this.night) + this.nightMod.enemyBonus;
-      if (this.spawnTimer <= 0 && this.enemies.length < maxE) {
+      const nocturnal = this.enemies.filter((e) => !e.guardian && !e.passive).length;
+      if (this.spawnTimer <= 0 && nocturnal < maxE) {
         this.spawnTimer = Math.max(3.5, 11 - this.night * 0.05);
         this.spawnEnemy();
       }
@@ -448,7 +466,7 @@ export class GameStage implements Stage {
 
     // Утро — твари уходят (демонстрационный олень остаётся стоять)
     if (!this.dayNight.isNight && nightNow < 0.2 && this.enemies.length > 0 && Math.random() < dt * 0.6) {
-      const e = this.enemies.find((x) => !x.passive);
+      const e = this.enemies.find((x) => !x.passive && !x.guardian);
       if (e) e.takeDamage(999);
     }
   }
@@ -712,13 +730,13 @@ export class GameStage implements Stage {
     const damage = def?.damage ?? 7;
 
     let best: Enemy | null = null;
-    let bestD = 3.0;
+    let bestD = 3.6;
     for (const e of this.enemies) {
       if (!e.alive) continue;
       const to = e.position.clone().add(new THREE.Vector3(0, 1.2, 0)).sub(origin);
       const d = to.length();
       if (d > bestD) continue;
-      if (to.normalize().angleTo(dir) > 0.8) continue;
+      if (to.normalize().angleTo(dir) > 0.95) continue;
       best = e;
       bestD = d;
     }
@@ -727,7 +745,8 @@ export class GameStage implements Stage {
       const killed = best.takeDamage(damage);
       if (killed) {
         this.handle.hud.toast('Тварь повержена.', 2200);
-        this.quests.notify('kill', 1);
+        this.grantKillLoot(best);
+        this.quests.notify('kill', 1).forEach((q) => this.completeQuest(q.title));
       }
       return;
     }
@@ -776,10 +795,21 @@ export class GameStage implements Stage {
     const killed = best.takeDamage(55);
     if (killed) {
       this.handle.hud.toast('Тварь пала от выстрела.', 2200);
+      this.grantKillLoot(best);
       this.quests.notify('kill', 1).forEach((q) => this.completeQuest(q.title));
     } else {
       this.handle.hud.toast('Попадание!', 1200);
     }
+  }
+
+  /** Добыча с убитой твари: мясо, у оленя ещё и диковина. */
+  private grantKillLoot(enemy: Enemy): void {
+    const meat = enemy.kind === 'deer' ? 6 : enemy.kind === 'bog' ? 4 : enemy.kind === 'crawler' ? 1 : 2;
+    const left = this.inventory.add('meat', meat);
+    if (left === 0) this.handle.hud.toast(`+${meat} мяса`, 2000);
+    else this.handle.hud.toast('Мясо не помещается в инвентарь.', 2000);
+    if (enemy.kind === 'deer') this.inventory.add('relic', 1);
+    this.handle.audio.pickup();
   }
 
   private tryInteract(): void {

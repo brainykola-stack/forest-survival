@@ -4,6 +4,7 @@ import { PLAYER } from '../core/Config';
 import type { InputManager } from '../core/InputManager';
 import type { Terrain } from '../world/Terrain';
 import { PlayerStats } from './PlayerStats';
+import { modelLibrary, type ModelInstance } from '../core/ModelLibrary';
 
 /** Игрок от первого лица: кинематический контроллер Rapier, камера, покачивание. */
 export class Player {
@@ -23,7 +24,8 @@ export class Player {
   torchLight: THREE.PointLight;
   torchOn = false;
   private weaponGroup: THREE.Group | null = null;
-  private weaponKind: 'rifle' | null = null;
+  private weaponKind: string | null = null;
+  private heldModel: ModelInstance | null = null;
 
   private velY = 0;
   private velX = 0;
@@ -88,12 +90,17 @@ export class Player {
     this.torchLight.intensity = on ? 6.5 : 0;
   }
 
-  /** Простая модель оружия в руках от первого лица. */
-  setWeapon(kind: 'rifle' | null): void {
-    if (this.weaponKind === kind) return;
-    this.weaponKind = kind;
+  /**
+   * Предмет в руках от первого лица. Для топора, факела и ружья берём
+   * готовые GLB-модели, для остального — простая геометрия.
+   */
+  setHeldItem(id: string | null): void {
+    if (this.weaponKind === id) return;
+    this.weaponKind = id;
     if (this.weaponGroup) {
       this.camera.remove(this.weaponGroup);
+      this.heldModel?.dispose();
+      this.heldModel = null;
       this.weaponGroup.traverse((o) => {
         if (o instanceof THREE.Mesh) {
           o.geometry.dispose();
@@ -102,23 +109,45 @@ export class Player {
       });
       this.weaponGroup = null;
     }
-    if (!kind) return;
+    if (!id) return;
 
     const group = new THREE.Group();
-    const wood = new THREE.MeshLambertMaterial({ color: 0x6b4a2c });
-    const metal = new THREE.MeshLambertMaterial({ color: 0x27272b });
-
-    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.1, 0.55), wood);
-    stock.position.set(0.24, -0.22, -0.55);
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.85, 8), metal);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0.24, -0.16, -0.95);
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.18, 0.1), wood);
-    grip.position.set(0.24, -0.32, -0.42);
-    group.add(stock, barrel, grip);
-    group.position.set(0, 0, 0);
+    group.position.set(0.26, -0.26, -0.55);
+    group.rotation.set(0.05, -0.35, 0.15);
     this.camera.add(group);
     this.weaponGroup = group;
+
+    const modelKey = id === 'axe' ? 'axe' : id === 'torch' ? 'torch' : id === 'rifle' ? 'shotgun' : null;
+    if (modelKey) {
+      const instance = modelLibrary.create(modelKey, 0.85);
+      if (instance) {
+        instance.root.position.y -= 0.35;
+        group.add(instance.root);
+        this.heldModel = instance;
+        return;
+      }
+    }
+
+    // Процедурный запасной вариант: копьё, кирка и прочее.
+    const wood = new THREE.MeshLambertMaterial({ color: 0x6b4a2c });
+    const metal = new THREE.MeshLambertMaterial({ color: 0x2b2b30 });
+    if (id === 'spear') {
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 1.6, 6), wood);
+      shaft.rotation.x = Math.PI / 2;
+      shaft.position.set(0, 0, -0.55);
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.25, 6), metal);
+      tip.rotation.x = -Math.PI / 2;
+      tip.position.set(0, 0, -1.4);
+      group.add(shaft, tip);
+    } else if (id === 'pickaxe') {
+      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.025, 1.0, 6), wood);
+      handle.rotation.x = Math.PI / 2;
+      handle.position.set(0, 0, -0.5);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.07, 0.07), metal);
+      head.position.set(0, 0.02, -0.95);
+      head.rotation.z = 0.25;
+      group.add(handle, head);
+    }
   }
 
   damage(amount: number): boolean {

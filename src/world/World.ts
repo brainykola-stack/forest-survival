@@ -61,6 +61,8 @@ export class World {
   readonly buildings: BuildingInfo[] = [];
   readonly notes: NoteSpot[] = [];
   readonly childSpots: ChildSpot[] = [];
+  /** Входы в пещеры: там прячутся дети, охраняют их волки. */
+  readonly caveSites: THREE.Vector3[] = [];
   readonly campPos = new THREE.Vector3(0, 0, 0);
 
   private rng: RNG;
@@ -82,8 +84,9 @@ export class World {
     scene.add(this.group);
 
     this.buildTerrainCollider();
-    this.buildVegetation();
+    // Сначала дома и пещеры, чтобы деревья не прорастали сквозь стены.
     this.buildBuildings();
+    this.buildVegetation();
     this.buildProps();
   }
 
@@ -353,13 +356,16 @@ export class World {
   // ------------------------------------------------------------------ постройки
 
   private buildBuildings(): void {
-    this.house(20, 12, 9, 7, 1, 'Хижина у лагеря', true);
-    this.house(-54, -142, 8, 6.5, 1, 'Хижина в долине', false);
-    this.house(-118, -48, 11, 8, 2, 'Двухэтажный дом', false);
-    this.house(-138, -70, 8.5, 7, 1, 'Сторожка', false);
+    this.house(20, 12, 14, 10, 1, 'Хижина у лагеря', true);
+    this.house(-54, -142, 12, 9, 1, 'Хижина в долине', false);
+    this.house(-118, -48, 16, 11, 2, 'Двухэтажный дом', false);
+    this.house(-138, -70, 11, 9, 1, 'Сторожка', false);
     this.watchtower(120, 86);
     this.campSite(112, -102);
     this.caveMouth(44, 152);
+    this.caveMouth(-62, 46);
+    this.caveMouth(96, -34);
+    this.caveMouth(-96, 118);
     this.ruin(-10, 128);
   }
 
@@ -474,6 +480,57 @@ export class World {
     }
 
     this.buildings.push({ name, x, z, size: Math.max(halfW, halfD) });
+    this.houseProps(x, z, w, d);
+  }
+
+  /** Двор вокруг дома: забор, бочки, поленница, скамья и фонарь. */
+  private houseProps(x: number, z: number, w: number, d: number): void {
+    const y = this.terrain.heightAt(x, z);
+    const wood = new THREE.MeshLambertMaterial({ color: 0x5a4630 });
+    const dark = new THREE.MeshLambertMaterial({ color: 0x3b2f22 });
+    const stone = new THREE.MeshLambertMaterial({ color: 0x63605a });
+
+    const add = (px: number, py: number, pz: number, sx: number, sy: number, sz: number, mat: THREE.Material, rotY = 0) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+      mesh.position.set(px, py, pz);
+      mesh.rotation.y = rotY;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.group.add(mesh);
+    };
+
+    // Заборчик по краям двора
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 3; i++) {
+        const fx = x + side * (w / 2 + 2.2);
+        const fz = z + d / 2 + 1.6 - i * 2.2;
+        add(fx, y + 0.45, fz, 0.14, 0.9, 1.9, wood);
+      }
+    }
+
+    // Бочки у стены
+    for (const [bx, bz] of [
+      [x + w / 2 + 1.3, z - d / 2 + 1.4],
+      [x + w / 2 + 1.5, z - d / 2 + 3.0],
+    ] as Array<[number, number]>) {
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.42, 0.95, 10), wood);
+      barrel.position.set(bx, this.terrain.heightAt(bx, bz) + 0.48, bz);
+      barrel.castShadow = true;
+      this.group.add(barrel);
+    }
+
+    // Поленница
+    for (let i = 0; i < 3; i++) {
+      add(x - w / 2 - 1.8, y + 0.2 + i * 0.28, z - d / 2 + 2.0, 1.6, 0.26, 0.9, dark);
+    }
+
+    // Скамья и фонарь у входа
+    add(x + 2.2, y + 0.45, z + d / 2 + 2.1, 1.8, 0.12, 0.5, wood);
+    add(x - 2.2, y + 1.1, z + d / 2 + 2.2, 0.16, 2.2, 0.16, dark);
+    add(x - 2.2, y + 2.2, z + d / 2 + 2.2, 0.34, 0.34, 0.34, stone);
+    const lantern = new THREE.PointLight(0xffb861, 4, 10, 2);
+    lantern.position.set(x - 2.2, y + 2.25, z + d / 2 + 2.2);
+    this.group.add(lantern);
   }
 
   private watchtower(x: number, z: number): void {
@@ -574,6 +631,7 @@ export class World {
     this.group.add(dark);
 
     this.buildings.push({ name: 'Пещера', x, z, size: 10 });
+    this.caveSites.push(new THREE.Vector3(x, y, z));
   }
 
   private ruin(x: number, z: number): void {
@@ -653,32 +711,23 @@ export class World {
       -70,
     );
 
-    this.childSpots.push(
-      {
-        id: 'child1',
-        name: 'Мира',
-        hint: 'Прячется в хижине в долине',
-        pos: new THREE.Vector3(-54, this.terrain.heightAt(-54, -142) + 0.1, -142),
-      },
-      {
-        id: 'child2',
-        name: 'Тимур',
-        hint: 'Сидит в старом доме деревни',
-        pos: new THREE.Vector3(-118, this.terrain.heightAt(-118, -48) + 0.1, -48),
-      },
-      {
-        id: 'child3',
-        name: 'Вера',
-        hint: 'Слышна у пещеры',
-        pos: new THREE.Vector3(44, this.terrain.heightAt(44, 152) + 0.1, 152),
-      },
-      {
-        id: 'child4',
-        name: 'Костя',
-        hint: 'Прячется в заброшенном лагере',
-        pos: new THREE.Vector3(112, this.terrain.heightAt(112, -102) + 0.1, -102),
-      },
-    );
+    // Все дети спрятаны в пещерах, и у каждой пещеры ходят волки.
+    const childData = [
+      { id: 'child1', name: 'Мира', hint: 'В северной пещере' },
+      { id: 'child2', name: 'Тимур', hint: 'В пещере у долины' },
+      { id: 'child3', name: 'Вера', hint: 'В каменной пещере на востоке' },
+      { id: 'child4', name: 'Костя', hint: 'В дальней пещере на западе' },
+    ];
+    this.caveSites.forEach((cave, i) => {
+      const data = childData[i];
+      if (!data) return;
+      this.childSpots.push({
+        id: data.id,
+        name: data.name,
+        hint: data.hint,
+        pos: new THREE.Vector3(cave.x, cave.y + 0.1, cave.z - 2),
+      });
+    });
   }
 
   // ------------------------------------------------------------------ узлы добычи

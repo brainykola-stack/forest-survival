@@ -28,8 +28,8 @@ export class PlayerStats {
     if (this.invuln > 0) this.invuln -= dt;
     if (this.hurtFlash > 0) this.hurtFlash = Math.max(0, this.hurtFlash - dt);
 
-    // Голод: медленно растёт, ускоряется при беге
-    this.hunger = Math.max(0, this.hunger - dt * (sprinting ? 0.2 : 0.1));
+    // Голод: полоса убывает постепенно, на бегу быстрее.
+    this.hunger = Math.max(0, this.hunger - dt * (sprinting ? 0.3 : 0.16));
 
     if (this.hunger <= 0) {
       this.starvationTick += dt;

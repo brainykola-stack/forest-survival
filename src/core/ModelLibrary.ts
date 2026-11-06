@@ -48,6 +48,10 @@ export class ModelLibrary {
       ['wolf', `${base}assets/models/Wolf.glb`],
       ['fox', `${base}assets/models/Fox.glb`],
       ['bull', `${base}assets/models/Bull.glb`],
+      ['axe', `${base}assets/models/Axe_tool.glb`],
+      ['torch', `${base}assets/models/Torch_item.glb`],
+      ['shotgun', `${base}assets/models/Shotgun.glb`],
+      ['knife', `${base}assets/models/Knife_tool.glb`],
     ];
     this.pending = Promise.all(
       jobs.map(async ([key, url]) => {
