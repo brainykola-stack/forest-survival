@@ -765,6 +765,8 @@ export class GameStage implements Stage {
 
   /** Выстрел из ружья: тратит патрон, бьёт самого вероятного врага в прицеле. */
   private tryShoot(): void {
+    // Перезарядка ружья длиннее, чем замах топором.
+    this.attackCd = 1.1;
     if (this.inventory.countOf('bullet') <= 0) {
       this.handle.audio.dryFire();
       this.handle.hud.toast('Нет патронов. Смастери их (C).', 2400);

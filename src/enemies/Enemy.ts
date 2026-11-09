@@ -78,6 +78,8 @@ export class Enemy {
   private lastPos = new THREE.Vector3();
   private speedActual = 0;
   private chargeTimer = 0;
+  private chaseStall = 0;
+  private lastChaseDist = Infinity;
 
   constructor(
     kind: EnemyKind,
@@ -153,6 +155,19 @@ export class Enemy {
         const speed = this.stats.chaseSpeed * (this.chargeTimer > 0 ? 1.25 : 1);
         this.moveTowards(target, speed, dt, ctx);
         if (this.chargeTimer > 0) this.chargeTimer -= dt;
+
+        // Если дистанция не сокращается (круг костра, ствол, угол дома),
+        // зверь не долбится в препятствие вечно, а уходит искать обход.
+        if (dist < this.lastChaseDist - 0.15) this.chaseStall = 0;
+        else this.chaseStall += dt;
+        this.lastChaseDist = dist;
+        if (this.chaseStall > 5) {
+          this.chaseStall = 0;
+          this.pickEscapeTarget(ctx);
+          this.setState('search');
+          break;
+        }
+
         if (dist < this.stats.attackRange && this.attackCd <= 0) {
           this.setState('attack');
           this.attackWindup = 0.45;
@@ -213,6 +228,10 @@ export class Enemy {
     this.stateTimer = 0;
     if (s === 'chase' && this.kind === 'deer' && Math.random() < 0.4) this.chargeTimer = 2.2;
     if (s === 'search') this.lastKnown = this.lastKnown ?? this.position.clone();
+    if (s === 'chase') {
+      this.chaseStall = 0;
+      this.lastChaseDist = Infinity;
+    }
   }
 
   private idle(dt: number): void {
@@ -228,6 +247,22 @@ export class Enemy {
       this.stateTimer = 0;
     }
     this.moveTowards(this.patrolTarget, this.stats.speed * 0.8, dt, ctx);
+  }
+
+  /** Куда уйти, если путь к цели перекрыт: от круга костра — наружу. */
+  private pickEscapeTarget(ctx: AIContext): void {
+    const safe = ctx.safe;
+    if (safe && safe.active) {
+      const dx = this.position.x - safe.x;
+      const dz = this.position.z - safe.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const r = safe.radius + 6;
+      this.patrolTarget.set(safe.x + (dx / len) * r, this.position.y, safe.z + (dz / len) * r);
+    } else {
+      const a = Math.random() * Math.PI * 2;
+      this.patrolTarget.set(this.position.x + Math.cos(a) * 10, this.position.y, this.position.z + Math.sin(a) * 10);
+    }
+    this.lastKnown = null;
   }
 
   private pickPatrolTarget(): void {
