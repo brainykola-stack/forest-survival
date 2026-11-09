@@ -434,6 +434,7 @@ export class GameStage implements Stage {
       physics: this.physics,
       playerLit: this.torchOn || this.player.position.distanceTo(this.campfire.position) < this.campfire.safeRadius(),
       playerRunning: this.player.sprinting,
+      torchOn: this.torchOn,
       safe: {
         x: this.campfire.position.x,
         z: this.campfire.position.z,
@@ -591,6 +592,13 @@ export class GameStage implements Stage {
     this.handle.save.save(this.makeSave()).then(() => this.handle.afterSave());
 
     for (const kind of mod.guaranteed) this.spawnEnemy(kind, false);
+
+    // Каждую ночь Хозяин кружит у лагеря, но не может пересечь круг огня.
+    const angle = Math.random() * Math.PI * 2;
+    const dx = this.campfire.position.x + Math.cos(angle) * 19;
+    const dz = this.campfire.position.z + Math.sin(angle) * 19;
+    const stag = new Enemy('deer', new THREE.Vector3(dx, this.world.heightAt(dx, dz), dz), this.scene);
+    this.enemies.push(stag);
   }
 
   private onDayStart(): void {

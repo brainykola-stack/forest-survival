@@ -3,9 +3,10 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Terrain } from '../world/Terrain';
 import { modelLibrary, type ModelInstance } from '../core/ModelLibrary';
 import { steerAroundSafeZone, type SafeZone } from './SafeZone';
+import { buildDeerMonster, animateDeerMonster, type DeerParts } from './DeerMonster';
 
 export type EnemyKind = 'deer' | 'hunter' | 'crawler' | 'bog';
-export type AIState = 'idle' | 'patrol' | 'investigate' | 'chase' | 'attack' | 'search' | 'return';
+export type AIState = 'idle' | 'patrol' | 'investigate' | 'chase' | 'attack' | 'search' | 'return' | 'flee';
 
 export interface AIContext {
   playerPos: THREE.Vector3;
@@ -13,6 +14,8 @@ export interface AIContext {
   physics: RAPIER.World;
   playerLit: boolean;
   playerRunning: boolean;
+  /** Горит ли факел в руках игрока: Олень боится света. */
+  torchOn?: boolean;
   /** Зона защиты костра: пока огонь горит, внутрь не пускает. */
   safe?: SafeZone | null;
 }
@@ -68,6 +71,7 @@ export class Enemy {
   lastKnown: THREE.Vector3 | null = null;
   private model: Model;
   private model3d: ModelInstance | null = null;
+  private deerParts: DeerParts | null = null;
   private attackClip = 'Attack';
   private time = 0;
   private stateTimer = 0;
@@ -121,6 +125,11 @@ export class Enemy {
     const toPlayer = ctx.playerPos.clone().sub(this.position);
     const dist = toPlayer.length();
     const visible = this.canSee(ctx, dist);
+
+    // Олень боится света факела и отступает, если игрок подошёл с огнём.
+    if (this.kind === 'deer' && ctx.torchOn && dist < 13 && this.state !== 'flee' && this.state !== 'attack') {
+      this.setState('flee');
+    }
 
     switch (this.state) {
       case 'idle':
@@ -180,6 +189,17 @@ export class Enemy {
         const attacked = this.attackTick(dt, ctx, dist);
         if (attacked) return { attacked: true };
         if (this.stateTimer > 1.0) this.setState('chase');
+        break;
+      }
+      case 'flee': {
+        // Уходит от света, прижимая уши.
+        const away = this.position.clone().sub(ctx.playerPos);
+        away.y = 0;
+        if (away.lengthSq() < 0.01) away.set(1, 0, 0);
+        away.normalize();
+        const escape = this.position.clone().addScaledVector(away, 14);
+        this.moveTowards(escape, this.stats.chaseSpeed * 0.9, dt, ctx);
+        if (this.stateTimer > 3.5 || !ctx.torchOn) this.setState('return');
         break;
       }
       case 'search':
@@ -383,6 +403,22 @@ export class Enemy {
     this.group.position.copy(this.position);
     this.group.rotation.y = this.heading;
 
+    // Олень-монстр: собственная процедурная анимация.
+    if (this.deerParts) {
+      const animState =
+        this.state === 'attack'
+          ? 'attack'
+          : this.state === 'chase'
+            ? 'chase'
+            : this.state === 'flee'
+              ? 'flee'
+              : this.speedActual > 0.4
+                ? 'walk'
+                : 'idle';
+      animateDeerMonster(this.deerParts, this.time, this.speedActual, animState);
+      return;
+    }
+
     // Анимация: качание ног и корпуса
     const pace = Math.min(2.2, 0.4 + this.speedActual * 0.28);
     const swing = Math.sin(this.time * pace * 6.5) * (this.speedActual > 0.2 ? 0.55 : 0.06);
@@ -417,13 +453,18 @@ export class Enemy {
   // ------------------------------------------------------------------ модели
 
   private buildModel(kind: EnemyKind): Model {
+    // Главный монстр — собственный низкополигональный Олень по референсу.
+    if (kind === 'deer') {
+      const parts = buildDeerMonster();
+      this.deerParts = parts;
+      return { group: parts.root, legs: [], head: null, eyes: [] };
+    }
     const spec = KIND_MODEL[kind];
     const instance = modelLibrary.create(spec.key, spec.height);
     if (instance) {
       this.attackClip = spec.attack;
       return this.wrapAnimal(instance, spec.glow);
     }
-    if (kind === 'deer') return this.buildDeer();
     if (kind === 'hunter') return this.buildHunter();
     if (kind === 'crawler') return this.buildCrawler();
     return this.buildBog();

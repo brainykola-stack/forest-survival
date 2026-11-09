@@ -46,7 +46,7 @@ export class Game implements GameHandle {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 1.12;
     host.appendChild(this.renderer.domElement);
 
     this.fade = document.createElement('div');

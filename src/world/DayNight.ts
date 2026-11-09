@@ -262,10 +262,11 @@ export class DayNight {
     this.fog.color.copy(horizon).multiplyScalar(0.85);
     this.fog.density = 0.009 + n * 0.016;
 
-    this.sun.intensity = (1 - n) * 2.3;
-    this.sun.color.setRGB(1.0, 0.94 - n * 0.25, 0.82 - n * 0.2);
+    // Днём солнце заметно ярче и теплее, вечером уходит в оранжевый.
+    this.sun.intensity = (1 - n) * 3.1;
+    this.sun.color.setRGB(1.0, 0.96 - n * 0.28, 0.86 - n * 0.24);
     this.moon.intensity = n * 0.55;
-    this.hemi.intensity = 0.6 - n * 0.42;
+    this.hemi.intensity = 0.74 - n * 0.5;
     this.hemi.color.setRGB(0.72 - n * 0.4, 0.82 - n * 0.45, 0.75 - n * 0.2);
 
     // Положение солнца и луны по дуге
@@ -287,7 +288,7 @@ export class DayNight {
     this.sunMesh.visible = n < 0.78;
 
     for (const cloud of this.clouds) {
-      (cloud.material as THREE.MeshBasicMaterial).opacity = 0.3 * (1 - n * 0.85);
+      (cloud.material as THREE.MeshBasicMaterial).opacity = 0.42 * (1 - n * 0.85);
     }
 
     this.moonMesh.position.copy(moonDir).multiplyScalar(420);
