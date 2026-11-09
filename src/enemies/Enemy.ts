@@ -112,8 +112,9 @@ export class Enemy {
     this.time += dt;
 
     if (this.passive) {
-      // Демонстрационный олень: только дышит и осматривается.
+      // Демонстрационный олень: дышит и медленно поворачивается для осмотра.
       this.speedActual = 0;
+      this.heading += dt * 0.4;
       this.updateModel3d(dt);
       this.applyTransform(ctx);
       return { attacked: false };
