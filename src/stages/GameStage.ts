@@ -545,11 +545,12 @@ export class GameStage implements Stage {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     if (!params.has('kit')) return;
+    // Порядок важен: первые четыре слота — быстрый доступ.
     this.inventory.add('rifle', 1);
-    this.inventory.add('bullet', 12);
     this.inventory.add('axe', 1);
-    this.inventory.add('pickaxe', 1);
     this.inventory.add('torch', 1);
+    this.inventory.add('bullet', 12);
+    this.inventory.add('pickaxe', 1);
     this.inventory.add('spear', 1);
     this.inventory.add('wood', 20);
     this.inventory.add('stone', 20);
