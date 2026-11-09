@@ -872,6 +872,22 @@ select {
   color: var(--moss);
 }
 
+.lobby-classes {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+
+.lobby-classes button {
+  flex: 1;
+}
+
+.lobby-classes button.active {
+  border-color: rgba(224, 168, 72, 0.8);
+  color: var(--amber);
+  background: rgba(224, 168, 72, 0.12);
+}
+
 .lobby-count {
   display: flex;
   gap: 8px;

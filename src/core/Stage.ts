@@ -5,6 +5,7 @@ import type { InputManager } from './InputManager';
 import type { SaveManager, SaveData } from './SaveManager';
 import type { HUD } from '../ui/HUD';
 import type { Screens } from '../ui/Screens';
+import type { PlayerClass } from '../player/Classes';
 
 /** Один игровой экран: меню, лобби или лес. */
 export interface Stage {
@@ -24,6 +25,9 @@ export interface GameHandle {
   save: SaveManager;
   hud: HUD;
   screens: Screens;
+  /** Выбранный в лобби класс персонажа. */
+  playerClass: PlayerClass;
+  setPlayerClass(value: PlayerClass): void;
   toMenu(): void;
   toLobby(): void;
   toGame(save?: SaveData | null): void;

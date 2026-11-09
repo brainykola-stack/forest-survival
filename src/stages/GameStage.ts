@@ -21,6 +21,7 @@ import { InventoryUI } from '../ui/InventoryUI';
 import { CraftingUI, BuildingUI } from '../ui/CraftingUI';
 import { TOTAL_NIGHTS, dangerForNight, maxEnemiesForNight, PLAYER, zoneAt } from '../core/Config';
 import { SessionState, type SessionPhase, type UiMode } from '../core/SessionState';
+import { classOf, type ClassDef } from '../player/Classes';
 
 
 
@@ -45,6 +46,8 @@ export class GameStage implements Stage {
   private buildingUI: BuildingUI;
 
   private session = new SessionState();
+  /** Класс, выбранный в лобби: меняет добычу, урон и лечение. */
+  private cls: ClassDef;
 
   private get state(): SessionPhase {
     return this.session.phase;
@@ -101,6 +104,9 @@ export class GameStage implements Stage {
     const spawn = new THREE.Vector3(0, campY + 0.2, 6);
     this.player = new Player(this.physics, this.scene, spawn, controller, this.handle.settings.qualityPreset.drawDistance);
     this.camera = this.player.camera;
+    // Класс из лобби применяется сразу: голод, урон, добыча, лечение.
+    this.cls = classOf(this.handle.playerClass);
+    this.player.stats.hungerDrainMult = this.cls.hungerMult;
     this.muzzleLight = new THREE.PointLight(0xffcf8a, 0, 22, 2);
     this.muzzleLight.position.set(0.22, -0.12, -1.0);
     this.player.camera.add(this.muzzleLight);
@@ -134,6 +140,7 @@ export class GameStage implements Stage {
     else {
       this.inventory.add('wood', 3);
       this.inventory.add('fiber', 2);
+      this.handle.hud.toast(`Класс: ${this.cls.name} — ${this.cls.description}`, 5200);
       this.handle.hud.toast('Полдень. Собери древесину и поддерживай костёр до темноты.', 5000);
       window.setTimeout(() => this.handle.hud.toast('E — взаимодействие · Tab — инвентарь · C — крафт · B — стройка', 6000), 1200);
     }
@@ -740,7 +747,7 @@ export class GameStage implements Stage {
     const origin = this.player.eyePosition;
     const slot = this.inventory.selectedSlot();
     const def = slot ? ITEMS[slot.id] : null;
-    const damage = def?.damage ?? 7;
+    const damage = (def?.damage ?? 7) * this.cls.damageMult;
 
     let best: Enemy | null = null;
     let bestD = 3.6;
@@ -819,7 +826,8 @@ export class GameStage implements Stage {
 
   /** Добыча с убитой твари: мясо, у оленя ещё и диковина. */
   private grantKillLoot(enemy: Enemy): void {
-    const meat = enemy.kind === 'deer' ? 6 : enemy.kind === 'bog' ? 4 : enemy.kind === 'crawler' ? 1 : 2;
+    const base = enemy.kind === 'deer' ? 6 : enemy.kind === 'bog' ? 4 : enemy.kind === 'crawler' ? 1 : 2;
+    const meat = base + this.cls.meatBonus;
     const left = this.inventory.add('meat', meat);
     if (left === 0) this.handle.hud.toast(`+${meat} мяса`, 2000);
     else this.handle.hud.toast('Мясо не помещается в инвентарь.', 2000);
@@ -921,6 +929,11 @@ export class GameStage implements Stage {
     const damage = hasTool ? 55 : 22;
     const loot = this.world.hitNode(node, damage, hasTool);
     if (!loot) return;
+    // Лесоруб получает дополнительное дерево с каждого удара.
+    if (this.cls.woodBonus > 0 && node.kind === 'tree') {
+      const wood = loot.find((l) => l.id === 'wood');
+      if (wood) wood.n += this.cls.woodBonus;
+    }
     this.handle.audio.chop();
     for (const l of loot) {
       const left = this.inventory.add(l.id as ItemId, l.n);
@@ -1011,10 +1024,12 @@ export class GameStage implements Stage {
   private useItem(id: ItemId): void {
     const def = ITEMS[id];
     if (def.heal) {
-      this.player.stats.heal(def.heal);
+      // У лекаря перевязки лечат сильнее.
+      const amount = def.heal + this.cls.healBonus;
+      this.player.stats.heal(amount);
       this.inventory.remove(id, 1);
       this.handle.audio.pickup();
-      this.handle.hud.toast(`+${def.heal} здоровья`, 1600);
+      this.handle.hud.toast(`+${amount} здоровья`, 1600);
       return;
     }
     if (def.hunger) {

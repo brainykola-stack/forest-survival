@@ -8,6 +8,8 @@ export class PlayerStats {
   invuln = 0;
   hurtFlash = 0;
   dead = false;
+  /** Множитель расхода голода: у лекаря 0.8, у остальных 1. */
+  hungerDrainMult = 1;
 
   private starvationTick = 0;
 
@@ -29,7 +31,7 @@ export class PlayerStats {
     if (this.hurtFlash > 0) this.hurtFlash = Math.max(0, this.hurtFlash - dt);
 
     // Голод: полоса убывает постепенно, на бегу быстрее.
-    this.hunger = Math.max(0, this.hunger - dt * (sprinting ? 0.3 : 0.16));
+    this.hunger = Math.max(0, this.hunger - dt * (sprinting ? 0.3 : 0.16) * this.hungerDrainMult);
 
     if (this.hunger <= 0) {
       this.starvationTick += dt;

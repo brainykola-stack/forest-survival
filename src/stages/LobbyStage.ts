@@ -81,6 +81,10 @@ export class LobbyStage implements Stage {
       onCount: () => {
         this.handle.audio.uiClick();
       },
+      onClass: (c) => {
+        this.handle.setPlayerClass(c);
+        this.handle.audio.uiClick();
+      },
       onReady: () => {
         this.handle.audio.uiClick();
       },

@@ -2,9 +2,11 @@ import type { Stage } from '../core/Stage';
 import type { GameHandle } from '../core/Stage';
 import type { SaveData } from '../core/SaveManager';
 import type { BuildKind } from '../survival/Building';
+import { CLASS_LIST, type PlayerClass } from '../player/Classes';
 
 interface LobbyHandlers {
   onCount: (n: number) => void;
+  onClass: (c: PlayerClass) => void;
   onReady: () => void;
   onStart: () => void;
   onBack: () => void;
@@ -16,6 +18,7 @@ export class LobbyUI {
   private count = 1;
   private ready = false;
   private countdown = 0;
+  private selectedClass: PlayerClass = 'lumberjack';
 
   constructor(
     private root: HTMLElement,
@@ -33,7 +36,8 @@ export class LobbyUI {
         <div class="lobby-title">Лесной лагерь</div>
         <div class="lobby-status">ожидание</div>
       </div>
-      <div class="lobby-hint">Это безопасное место перед выходом в лес. Выбери размер отряда и подтверди готовность.</div>
+      <div class="lobby-hint">Это безопасное место перед выходом в лес. Выбери класс, размер отряда и подтверди готовность.</div>
+      <div class="lobby-classes"></div>
       <div class="lobby-count"></div>
       <div class="player-list"></div>
       <div class="countdown hidden"></div>
@@ -73,6 +77,22 @@ export class LobbyUI {
       });
       countBox.appendChild(b);
     }
+
+    const classBox = panel.querySelector('.lobby-classes') as HTMLElement;
+    for (const c of CLASS_LIST) {
+      const b = document.createElement('button');
+      b.className = 'btn';
+      b.dataset.cls = c.id;
+      b.innerHTML = `${c.icon} ${c.name}`;
+      b.title = c.description;
+      b.addEventListener('click', () => {
+        this.selectedClass = c.id;
+        this.handlers.onClass(c.id);
+        this.refresh();
+      });
+      classBox.appendChild(b);
+    }
+
     this.refresh();
   }
 
@@ -96,6 +116,12 @@ export class LobbyUI {
 
     Array.from(countBox.children).forEach((btn, i) => {
       (btn as HTMLElement).classList.toggle('active', i + 1 === this.count);
+    });
+
+    const classBox = panel.querySelector('.lobby-classes') as HTMLElement;
+    Array.from(classBox.children).forEach((btn) => {
+      const el = btn as HTMLElement;
+      el.classList.toggle('active', el.dataset.cls === this.selectedClass);
     });
 
     list.innerHTML = '';

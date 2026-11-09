@@ -12,6 +12,7 @@ import { Screens } from '../ui/Screens';
 import { MenuStage } from '../stages/MenuStage';
 import { LobbyStage } from '../stages/LobbyStage';
 import { GameStage } from '../stages/GameStage';
+import type { PlayerClass } from '../player/Classes';
 
 /** Ядро: рендерер, цикл, переключение сцен и общие сервисы. */
 export class Game implements GameHandle {
@@ -22,6 +23,7 @@ export class Game implements GameHandle {
   readonly save = new SaveManager();
   readonly hud: HUD;
   readonly screens: Screens;
+  playerClass: PlayerClass = 'lumberjack';
 
   private stage: Stage | null = null;
   private clock = new THREE.Clock();
@@ -280,6 +282,10 @@ export class Game implements GameHandle {
       // игрок кликнет по экрану, подсказка в HUD это показывает.
       if (ok) this.input.requestLock();
     });
+  }
+
+  setPlayerClass(value: PlayerClass): void {
+    this.playerClass = value;
   }
 
   async afterSave(): Promise<void> {
